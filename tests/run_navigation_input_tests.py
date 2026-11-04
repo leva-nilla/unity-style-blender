@@ -18,6 +18,11 @@ addon = fixtures.addon
 check = fixtures.check
 context = fixtures.context
 OUTPUT = fixtures.OUTPUT
+context_menus = []
+
+
+def observe_context_menu(self, context):
+    context_menus.append(True)
 
 
 def event(kind, value="PRESS", point=None, **modifiers):
@@ -55,6 +60,7 @@ def setup():
         view().update()
     global original_geometry
     original_geometry = geometry()
+    bpy.types.VIEW3D_MT_edit_mesh_context_menu.append(observe_context_menu)
     event("MOUSEMOVE", "NOTHING")
 
 
@@ -148,6 +154,35 @@ def check_axis_finished():
           "perspective projection remains after finishing axis-view navigation")
 
 
+def wheel_only():
+    global wheel_start_speed
+    wheel_start_speed = fixtures.prefs_entry.preferences.fly_speed
+    context_menus.clear()
+    event("RIGHTMOUSE")
+    event("WHEELUPMOUSE")
+
+
+def check_wheel_only():
+    current = fixtures.view_snapshot()
+    check(len(addon._running) == 1 and current[3] == "ORTHO" and view().is_orthographic_side_view
+          and (current[0] - initial[0]).length < 0.0001
+          and current[1].rotation_difference(initial[1]).angle < 0.0001
+          and abs(current[2] - initial[2]) < 0.0001,
+          "wheel-only speed adjustment preserves the axis projection and complete view")
+    check(next(iter(addon._running))._speed > wheel_start_speed,
+          "wheel-only input still adjusts the navigation speed")
+
+
+def tiny_move():
+    _, _, region = context()
+    event("MOUSEMOVE", "NOTHING", Vector((region.width / 2 + 1, region.height / 2 + 1)))
+
+
+def check_wheel_finished():
+    check(not addon._running and view().view_perspective == "ORTHO" and not context_menus,
+          "wheel-only release keeps orthographic projection without opening a context menu")
+
+
 def look():
     _, _, region = context()
     event("MOUSEMOVE", "NOTHING", Vector((region.width / 2 + 80, region.height / 2 + 30)))
@@ -192,6 +227,7 @@ def check_free_ortho():
 
 def finish():
     check(geometry() == original_geometry, "all navigation leaves mesh geometry intact")
+    bpy.types.VIEW3D_MT_edit_mesh_context_menu.remove(observe_context_menu)
     addon.unregister()
     check(not addon._keymaps and not addon._running, "input regression suite cleans up its handlers and bindings")
     (OUTPUT / "navigation-input-results.json").write_text(json.dumps({"passed": len(fixtures.checks),
@@ -207,6 +243,11 @@ tasks = [setup, select_edge, check_loop, lambda: select_edge(1, shift=True), che
          look, check_axis_look, check_restored,
          lambda: event("NUMPAD_7"), lambda: check_axis("Top"), lambda: event("RIGHTMOUSE"),
          look, check_axis_look, check_restored,
+         lambda: event("NUMPAD_1"), lambda: check_axis("Front, wheel only"), wheel_only,
+         check_wheel_only, tiny_move, check_wheel_only,
+         lambda: event("RIGHTMOUSE", "RELEASE"), check_wheel_finished,
+         wheel_only, check_wheel_only, look, check_axis_look, check_restored,
+         wheel_only, check_wheel_only, lambda: event("W"), check_axis_fly, check_axis_finished,
          disable_conversion, lambda: event("NUMPAD_1"), lambda: check_axis("Front, conversion disabled"),
          lambda: event("RIGHTMOUSE"), lambda: event("W"), check_disabled,
          free_ortho, lambda: event("RIGHTMOUSE"), lambda: event("W"), check_free_ortho, finish]

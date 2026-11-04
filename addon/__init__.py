@@ -501,6 +501,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self._velocity = Vector((0, 0, 0))
         self._zoom_velocity = Vector((0, 0, 0))
         self._used = False
+        self._navigating = False
         self._stopped = False
         self._mode = context.mode
         self._timer = self._wm.event_timer_add(1.0 / setting(context, "update_rate", 120), window=context.window)
@@ -511,6 +512,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
 
     def _use_navigation(self):
         self._used = True
+        self._navigating = True
         if self._axis_ortho:
             self._view.view_perspective = "PERSP"
             self._view.is_orthographic_side_view = False
@@ -614,13 +616,14 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             x, y = event.mouse_x, event.mouse_y
             dx, dy = x - self._mouse[0], y - self._mouse[1]
             self._mouse = (x, y)
-            if not self._used:
+            if not self._navigating:
                 if (x - self._origin[0]) ** 2 + (y - self._origin[1]) ** 2 > 9:
                     self._use_navigation()
-            if self._used:
+            if self._navigating:
                 self._look(dx, dy)
         elif event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
-            self._use_navigation()
+            # Speed adjustment consumes the gesture without moving or changing projection.
+            self._used = True
             factor = self._wheel_factor if event.type == "WHEELUPMOUSE" else 1 / self._wheel_factor
             self._speed = max(0.01, min(10000.0, self._speed * factor))
             if self._remember_speed and self._prefs is not None:
