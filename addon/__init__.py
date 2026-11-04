@@ -13,8 +13,13 @@ from .motion import integrate_velocity, movement_axes
 _keymaps = []
 _running = set()
 _registered = False
-_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_WEIGHT"}
+_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_WEIGHT", "PAINT_TEXTURE"}
 _MODE_MAPS = ("Object Mode", "Mesh", "Pose")
+_PAINT_PANELS = {
+    "SCULPT": "VIEW3D_PT_sculpt_context_menu",
+    "PAINT_WEIGHT": "VIEW3D_PT_paint_weight_context_menu",
+    "PAINT_TEXTURE": "VIEW3D_PT_paint_texture_context_menu",
+}
 
 
 def preferences(context):
@@ -61,7 +66,7 @@ def _install_keymaps(context):
             _add_key(km, "view3d.move", "LEFTMOUSE", alt=True, ctrl=True)
             _add_key(km, "view3d.zoom", "RIGHTMOUSE", alt=True)
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
-        for name in ("Sculpt", "Weight Paint"):
+        for name in ("Sculpt", "Weight Paint", "Image Paint"):
             # Preserve paint-specific chords such as Alt-LMB bone selection.
             km = kc.keymaps.new(name=name, space_type="EMPTY")
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
@@ -371,9 +376,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         if event.type == "RIGHTMOUSE" and event.value == "RELEASE":
             self.stop()
             if not self._used:
-                if self._mode in {"SCULPT", "PAINT_WEIGHT"}:
-                    panel = "VIEW3D_PT_sculpt_context_menu" if self._mode == "SCULPT" else "VIEW3D_PT_paint_weight_context_menu"
-                    bpy.ops.wm.call_panel(name=panel)
+                if self._mode in _PAINT_PANELS:
+                    bpy.ops.wm.call_panel(name=_PAINT_PANELS[self._mode])
                 else:
                     menu = {"OBJECT": "VIEW3D_MT_object_context_menu",
                             "EDIT_MESH": "VIEW3D_MT_edit_mesh_context_menu",

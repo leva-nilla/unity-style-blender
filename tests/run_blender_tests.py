@@ -62,7 +62,7 @@ def setup():
     bpy.context.window_manager.keyconfigs.update()
     count = len(addon._keymaps)
     addon.register()
-    check(count == 35 and len(addon._keymaps) == count, "register is idempotent (35 bindings)")
+    check(count == 36 and len(addon._keymaps) == count, "register is idempotent (36 bindings)")
     check(not any(km.name == "Mesh" and item.type in {"E", "F", "R", "W"}
                   for km, item in addon._keymaps), "mesh modeling shortcuts are preserved")
     # User-authored item must survive the add-on lifecycle without mutation.
@@ -367,7 +367,7 @@ def check_preferences():
     prefs.navigation = True
     prefs.object_tools = True
     prefs.outliner_hierarchy = True
-    check(len(addon._keymaps) == 35, "preference toggles restore bindings without duplicates")
+    check(len(addon._keymaps) == 36, "preference toggles restore bindings without duplicates")
     bpy.context.preferences.addons.remove(entry)
 
 
@@ -495,13 +495,30 @@ def paint_mode(mode):
             group = obj.vertex_groups.new(name="Navigation regression")
             group.add(list(range(len(obj.data.vertices))), 0.375, "REPLACE")
             group.add([0], 0.875, "REPLACE")
+        elif mode == "TEXTURE_PAINT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+            image = bpy.data.images.new("Navigation regression texture", width=8, height=8,
+                                        alpha=True, float_buffer=True)
+            image.pixels[:] = [((i % 4) + 1) / 4 for i in range(8 * 8 * 4)]
+            material = bpy.data.materials.new("Navigation regression material")
+            material.use_nodes = True
+            texture = material.node_tree.nodes.new("ShaderNodeTexImage")
+            texture.image = image
+            material.node_tree.nodes.active = texture
+            shader = next(node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED")
+            material.node_tree.links.new(texture.outputs["Color"], shader.inputs["Base Color"])
+            bpy.context.active_object.data.materials.clear()
+            bpy.context.active_object.data.materials.append(material)
         bpy.ops.object.mode_set(mode=mode)
 
 
 def paint_snapshot():
     obj = bpy.context.active_object
+    textures = [(node.image.name, tuple(node.image.pixels[:]))
+                for slot in obj.material_slots if slot.material and slot.material.use_nodes
+                for node in slot.material.node_tree.nodes if node.type == "TEX_IMAGE" and node.image]
     return ([v.co.copy() for v in obj.data.vertices],
-            [[(g.group, g.weight) for g in v.groups] for v in obj.data.vertices])
+            [[(g.group, g.weight) for g in v.groups] for v in obj.data.vertices], textures)
 
 
 def start_paint_navigation():
@@ -518,7 +535,7 @@ def check_paint_navigation(mode):
 
 def check_paint_cancel(mode):
     check(bpy.context.mode == mode and not addon._running and close_to(initial[0], snapshot()[0])
-          and paint_snapshot() == original_paint_data, mode + " navigation leaves mesh and weights intact")
+          and paint_snapshot() == original_paint_data, mode + " navigation leaves mesh, weights, and texture pixels intact")
     # A short click must follow the native panel path without exceptions.
     event("RIGHTMOUSE")
 
@@ -569,7 +586,10 @@ tasks[-1:-1] = [check_fov, check_fov_projection,
                release_click, lambda: check_paint_click("SCULPT"),
                lambda: paint_mode("WEIGHT_PAINT"), start_paint_navigation, press_forward,
                lambda: check_paint_navigation("PAINT_WEIGHT"), lambda: check_paint_cancel("PAINT_WEIGHT"),
-               release_click, lambda: check_paint_click("PAINT_WEIGHT"), object_mode]
+               release_click, lambda: check_paint_click("PAINT_WEIGHT"),
+               lambda: paint_mode("TEXTURE_PAINT"), start_paint_navigation, press_forward,
+               lambda: check_paint_navigation("PAINT_TEXTURE"), lambda: check_paint_cancel("PAINT_TEXTURE"),
+               release_click, lambda: check_paint_click("PAINT_TEXTURE"), object_mode]
 
 
 def tick():
