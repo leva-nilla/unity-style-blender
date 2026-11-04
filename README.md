@@ -2,7 +2,7 @@
 
 [日本語](#ja) | [English](#en)
 
-[Download v0.1.11 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.11/unity_view_controls-0.1.11.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
+[Download v0.1.12 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.12/unity_view_controls-0.1.12.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
 
 <a id="ja"></a>
 
@@ -56,11 +56,11 @@ Nメニューの「押し出し」ボタンは、編集W/E/Rのオン・オフ�
 
 「影響範囲を表示」がオンなら、プロポーショナル編集をオンにして点を選ぶと、ビューポートにオレンジ色の円を表示します。Nメニューの影響半径を変えると即座に大きさが変わり、選択位置・パン・ズームにも追従します。円は選択点の中心から半径を示す目安です。複数点の選択、接続のみ、投影、隠れた要素などによる実際の影響領域を示すものではありません。
 
-表示はメッシュ、カーブ、ヘアカーブ、サーフェス、メタボール、ラティス、Grease Pencilの編集が対象です。選択なし・プロポーショナル編集オフ・編集モード終了・ビューポートのオーバーレイ非表示では円を隠します。変形中はBlender標準の範囲表示に切り替えます。プレビューは形状・選択・Undo履歴を変更しません。
+表示はメッシュ、カーブ、ヘアカーブ、サーフェス、メタボール、ラティス、Grease Pencilの編集が対象です。選択なし・プロポーショナル編集オフ・編集モード終了・ビューポートのオーバーレイ非表示では円を隠します。変形中はBlender標準の範囲表示に切り替えます。プレビューは形状・選択・Undo履歴を変更しません。選択中心をキャッシュし、視点移動・ズーム・半径調整では全頂点を再走査しません。選択・形状・親変換の変更、Undo／Redo、ファイル切替では更新します。Grease Pencilのレイヤー親・親ボーンと、新しいCurves形式のベジェハンドルだけの選択にも対応します。
 
 ### インストール
 
-1. [Release v0.1.11](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.11)から `unity_view_controls-0.1.11.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
+1. [Release v0.1.12](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.12)から `unity_view_controls-0.1.12.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
 2. Blenderで「編集 → プリファレンス → エクステンションを入手」を開きます。
 3. 右上のメニューの「ディスクからインストール」でZIPを指定し、有効化します。
 4. 「アドオン」でUnity View Controlsを開くと、「操作」と「フライスルー」の設定が表示されます。
@@ -106,7 +106,7 @@ DPI1600でのユーザーの調整値をもとに、新規導入時の初期感�
 - Blenderの座標系（Zが上）を維持します。透視投影のワールド基準ではQは下降、Eは上昇です。
 - UnityのQハンドツール、TのRectツール、Yの複合ツール、追従フォーカス、スナップ設定は今回の範囲外です。
 - カメラビューや回転ロック中は右ボタン飛行を開始しません。カメラビューを抜けるか、回転ロックを解除してください。
-- 自由な平行投影はフライスルー中も維持します。軸方向の平行投影は、初期設定では実際の移動・見回しを始めると透視へ切り替わります。Nメニューの「軸方向からは透視で移動」をオフにすると、軸方向でも平行投影を維持します。短い右クリックだけなら投影を変えません。Escでは開始時の軸方向・位置・向き・表示範囲・投影を復元します。
+- 自由な平行投影はフライスルー中も維持します。軸方向の平行投影は、初期設定では実際の移動・見回しを始めると透視へ切り替わります。Nメニューの「軸方向からは透視で移動」をオフにすると、軸方向でも平行投影を維持します。短い右クリックや、ホイールだけの速度調整では投影を変えません。ホイール調整後も、実際の移動・見回しを始めた時点で透視へ切り替えます。Escでは開始時の軸方向・位置・向き・表示範囲・投影を復元します。
 - マウス周回・平行移動・ズームはBlenderの標準処理を使います。速度や慣性までUnityと完全に一致させるものではありません。
 - 速度の記憶がオンなら、ホイール調整した値を移動速度として引き継ぎます。オフではその操作中だけ有効です。Escは視点を戻しますが、記憶した速度設定は維持します。
 
@@ -114,12 +114,12 @@ DPI1600でのユーザーの調整値をもとに、新規導入時の初期感�
 
 ### 開発・確認
 
-ソースは [v0.1.11タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.11)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
+ソースは [v0.1.12タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.12)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.11
+git checkout v0.1.12
 ```
 
 以下はPowerShellで、プロジェクトのルートから実行します。
@@ -129,11 +129,15 @@ git checkout v0.1.11
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --background --factory-startup --python-exit-code 1 --python tests/test_motion.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
+  --background --factory-startup --python-exit-code 1 --python tests/test_radius_preview.py
+& 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --background --factory-startup --python-exit-code 1 --python tests/check_mode_coverage.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_blender_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_navigation_input_tests.py
+& 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
+  --factory-startup --enable-event-simulate --python tests/run_radius_cache_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_outliner_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
@@ -144,7 +148,7 @@ git checkout v0.1.11
   --factory-startup --enable-event-simulate --python tests/run_editing_config_tests.py
 ```
 
-ビルドはBlenderの公式エクステンション検証とZIP生成を行います。`tests/run_navigation_input_tests.py` は実入力の辺ループ／リング選択、編集時のAlt＋中ドラッグ、数字キー後の投影切替、短い右クリック、Escでの軸方向復元、設定オフと自由な平行投影の保持を確認し、`artifacts/navigation-input-results.json` に結果を保存します。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。編集モードの回帰テストは、ボーン／アーマチュアデータの実右クリックメニュー、階層開閉、ボーン形状・親子関係・選択とモードの保持、登録解除を確認し、`artifacts/outliner-edit-results.json` に保存します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
+ビルドはBlenderの公式エクステンション検証とZIP生成を行います。`tests/test_radius_preview.py` は50万頂点でのキャッシュ再利用、中心の精度、GPの親・親ボーン、Curvesの左右ハンドル選択、登録解除を確認します。`tests/run_radius_cache_tests.py` は実入力の選択変更・形状変更・Undo／Redo・フライスルー中の更新と再利用を確認し、`artifacts/radius-cache-results.json` に保存します。`tests/run_navigation_input_tests.py` は実入力の辺ループ／リング選択、編集時のAlt＋中ドラッグ、数字キー後の投影切替、短い右クリック、Escでの軸方向復元、設定オフと自由な平行投影の保持を確認し、`artifacts/navigation-input-results.json` に結果を保存します。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。編集モードの回帰テストは、ボーン／アーマチュアデータの実右クリックメニュー、階層開閉、ボーン形状・親子関係・選択とモードの保持、登録解除を確認し、`artifacts/outliner-edit-results.json` に保存します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
 
 ### 参照仕様
 
@@ -156,7 +160,7 @@ git checkout v0.1.11
 
 ### ライセンス
 
-[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.11/addon/LICENSE)。
+[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.12/addon/LICENSE)。
 
 <a id="en"></a>
 
@@ -166,7 +170,7 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 
 ### Installation
 
-1. Download `unity_view_controls-0.1.11.zip` from [Release v0.1.11](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.11). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
+1. Download `unity_view_controls-0.1.12.zip` from [Release v0.1.12](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.12). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
 2. In Blender, open **Edit → Preferences → Get Extensions**.
 3. Open the menu in the upper-right corner, choose **Install from Disk**, select the ZIP, and enable the extension.
 4. Open **Add-ons → Unity View Controls** for preferences, or press **N** in the 3D View and choose **View → Unity View Controls**.
@@ -191,7 +195,7 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 | W / E / R in Object Mode | Select Move / Rotate / Scale gizmos |
 | F in Object Mode | Frame the selection |
 
-In free orthographic views, the default layout uses **QEAD to pan and W/S to zoom**. The N-panel can switch this to **WASD to pan and Q/E to zoom**. These free orthographic views keep their projection. By default, starting actual movement or mouse look from an axis-aligned orthographic view, such as a Front, Right, or Top view selected with a numeric key, switches to perspective. A short right click preserves the projection. Disable **軸方向からは透視で移動** in the N-panel to retain orthographic projection in axis views too. Esc restores the original axis alignment, projection, position, rotation, and view distance.
+In free orthographic views, the default layout uses **QEAD to pan and W/S to zoom**. The N-panel can switch this to **WASD to pan and Q/E to zoom**. These free orthographic views keep their projection. By default, starting actual movement or mouse look from an axis-aligned orthographic view, such as a Front, Right, or Top view selected with a numeric key, switches to perspective. A short right click or wheel-only speed adjustment preserves the projection. After a wheel adjustment, actual movement or mouse look still starts the perspective transition. Disable **軸方向からは透視で移動** in the N-panel to retain orthographic projection in axis views too. Esc restores the original axis alignment, projection, position, rotation, and view distance.
 
 Choose **View** or **World** movement coordinates in the N-panel. View coordinates follow the screen's right, up, and depth axes. World coordinates use horizontal movement and Blender's Z axis for height. Orthographic world-space panning uses the two world axes closest to the view plane.
 
@@ -241,7 +245,7 @@ The N-panel exposes the native transform orientation, proportional editing toggl
 
 Enable **影響範囲を表示** (Show influence radius), enable proportional editing, and select control points to see an orange circle in the viewport. The circle responds immediately to N-panel radius changes and follows the selection, panning, and zooming. It shows a radius guide centered on the selected points. Multiple selections, connected/projected options, and hidden elements can produce a different actual influence region.
 
-The preview supports Mesh, Curve, Hair Curves, Surface, Metaball, Lattice, and Grease Pencil editing. It hides with no selection, proportional editing off, Edit Mode exited, or viewport overlays disabled. During native transforms, Blender's native radius display takes over. The preview preserves geometry, selection, and Undo history.
+The preview supports Mesh, Curve, Hair Curves, Surface, Metaball, Lattice, and Grease Pencil editing. It hides with no selection, proportional editing off, Edit Mode exited, or viewport overlays disabled. During native transforms, Blender's native radius display takes over. The preview preserves geometry, selection, and Undo history. Selection centers are cached, so panning, zooming, and radius changes do not scan all vertices again. Selection, geometry, and parent-transform changes, Undo/Redo, and file loading refresh the cache. Grease Pencil layer object/bone parents and handle-only selections in modern Bezier Curves are supported.
 
 ### Configuration
 
@@ -287,15 +291,17 @@ Disabling the add-on removes its added inputs and cancels active navigation. It 
 
 ### Development and verification
 
-The complete release source is available at [tag v0.1.11](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.11). To work from that source:
+The complete release source is available at [tag v0.1.12](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.12). To work from that source:
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.11
+git checkout v0.1.12
 ```
 
 Run the PowerShell commands in the [Japanese development section](#development-commands) from the project root. `scripts/build.ps1` uses Blender's official extension validation and ZIP builder. Adjust the Blender executable path for your installation.
+
+`tests/test_radius_preview.py` checks reuse on a 500,000-vertex mesh, center accuracy, GP object/bone parents, modern Curves handle selection, and handler cleanup. `tests/run_radius_cache_tests.py` checks real selection/geometry events, Undo/Redo, and cache reuse during actual fly navigation, with results in `artifacts/radius-cache-results.json`.
 
 `tests/run_navigation_input_tests.py` covers actual loop/ring selection, Alt+middle-drag orbit, numeric axis views, perspective transitions, short context clicks, cancellation with axis restoration, the preference toggle, and free orthographic projection. Results go to `artifacts/navigation-input-results.json`.
 
@@ -313,4 +319,4 @@ This is an independent add-on. It preserves Blender's coordinate system and obje
 
 ### License
 
-[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.11/addon/LICENSE).
+[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.12/addon/LICENSE).
