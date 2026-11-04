@@ -16,11 +16,27 @@ Blenderの3Dビュー操作をUnity Editorに寄せるアドオン。Windows / B
 - 移動後に右ボタンを離すと確定。Escやウィンドウの非アクティブ化で開始時の視点へ戻します。
 - 無効化で追加したキー設定と実行中の操作を解除。既存キーマップの編集・削除、作品の編集、プリファレンスの自動保存は行いません。
 
-視点操作の対象はオブジェクト・メッシュ編集・ポーズ・スカルプト・ウェイトペイント・テクスチャペイントモードです。ペイント系モードでは右ドラッグで移動し、短い右クリックで標準のブラシ設定パネルを開きます。テクスチャペイントの対応範囲は3Dビューで、2Dの画像エディターには割り当てません。Alt＋クリックによるボーン選択などの専用操作は保持します。W/E/RとFはオブジェクトモードだけに適用し、編集モードの押し出し・面作成などを保持します。
+視点操作の対象はオブジェクト・メッシュ編集・ポーズ・スカルプト・頂点ペイント・ウェイトペイント・テクスチャペイントモードです。ペイント系モードでは右ドラッグで移動し、短い右クリックで標準のブラシ設定パネルを開きます。テクスチャペイントの対応範囲は3Dビューで、2Dの画像エディターには割り当てません。Alt＋クリックによるボーン選択などの専用操作は保持します。W/E/RとFはオブジェクトモードだけに適用し、編集モードの押し出し・面作成などを保持します。
+
+## モード対応
+
+メッシュ制作・ペイント・ポーズで使う基本7モードに対応しています。Blenderの全モードに対応するものではありません。
+
+| モード | 視点移動 | 短い右クリック |
+| --- | --- | --- |
+| オブジェクト | 対応 | 標準メニュー |
+| メッシュ編集 | 対応 | 標準メニュー |
+| スカルプト | 対応 | 標準ブラシ設定 |
+| 頂点ペイント | 対応 | 標準ブラシ設定 |
+| ウェイトペイント | 対応 | 標準ブラシ設定 |
+| テクスチャペイント（3Dビュー） | 対応 | 標準ブラシ設定 |
+| ポーズ | 対応 | 標準メニュー |
+
+ボーン編集、カーブ・サーフェス・テキスト・メタボール・ラティス・ポイントクラウドの編集、カーブのスカルプト、パーティクル編集、Grease Pencilの各モードは未対応です。導入済みBlenderのモード識別子との照合結果は `tests/check_mode_coverage.py` で再生成できます。
 
 ## インストール
 
-1. `dist/unity_view_controls-0.1.5.zip` を用意します。
+1. `dist/unity_view_controls-0.1.6.zip` を用意します。
 2. Blenderで「編集 → プリファレンス → エクステンションを入手」を開きます。
 3. 右上のメニューの「ディスクからインストール」でZIPを指定し、有効化します。
 4. 「アドオン」でUnity View Controlsを開くと、「操作」と「フライスルー」の設定が表示されます。
@@ -75,6 +91,8 @@ PowerShellで、このプロジェクトのルートから実行します。
 .\scripts\build.ps1
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --background --factory-startup --python-exit-code 1 --python tests/test_motion.py
+& 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
+  --background --factory-startup --python-exit-code 1 --python tests/check_mode_coverage.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_blender_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `

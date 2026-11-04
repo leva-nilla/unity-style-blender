@@ -62,7 +62,7 @@ def setup():
     bpy.context.window_manager.keyconfigs.update()
     count = len(addon._keymaps)
     addon.register()
-    check(count == 36 and len(addon._keymaps) == count, "register is idempotent (36 bindings)")
+    check(count == 37 and len(addon._keymaps) == count, "register is idempotent (37 bindings)")
     check(not any(km.name == "Mesh" and item.type in {"E", "F", "R", "W"}
                   for km, item in addon._keymaps), "mesh modeling shortcuts are preserved")
     # User-authored item must survive the add-on lifecycle without mutation.
@@ -204,7 +204,8 @@ def edit_mesh():
 
 
 def check_edit_fly():
-    check(len(addon._running) == 1, "RMB navigation overrides mesh context-menu keymap")
+    check(bpy.context.mode == "EDIT_MESH" and len(addon._running) == 1
+          and not close_to(initial[0], snapshot()[0]), "mesh edit supports RMB and WASD movement")
     event("ESC")
 
 
@@ -367,7 +368,7 @@ def check_preferences():
     prefs.navigation = True
     prefs.object_tools = True
     prefs.outliner_hierarchy = True
-    check(len(addon._keymaps) == 36, "preference toggles restore bindings without duplicates")
+    check(len(addon._keymaps) == 37, "preference toggles restore bindings without duplicates")
     bpy.context.preferences.addons.remove(entry)
 
 
@@ -509,6 +510,13 @@ def paint_mode(mode):
             material.node_tree.links.new(texture.outputs["Color"], shader.inputs["Base Color"])
             bpy.context.active_object.data.materials.clear()
             bpy.context.active_object.data.materials.append(material)
+        elif mode == "VERTEX_PAINT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+            mesh = bpy.context.active_object.data
+            colors = mesh.color_attributes.new(name="Navigation regression colors", type="FLOAT_COLOR", domain="CORNER")
+            for i, entry in enumerate(colors.data):
+                entry.color = ((i % 5) / 4, 0.25, 0.75, 1)
+            mesh.color_attributes.active_color_index = len(mesh.color_attributes) - 1
         bpy.ops.object.mode_set(mode=mode)
 
 
@@ -517,8 +525,10 @@ def paint_snapshot():
     textures = [(node.image.name, tuple(node.image.pixels[:]))
                 for slot in obj.material_slots if slot.material and slot.material.use_nodes
                 for node in slot.material.node_tree.nodes if node.type == "TEX_IMAGE" and node.image]
+    colors = [(attr.name, attr.domain, attr.data_type, [tuple(entry.color) for entry in attr.data])
+              for attr in obj.data.color_attributes]
     return ([v.co.copy() for v in obj.data.vertices],
-            [[(g.group, g.weight) for g in v.groups] for v in obj.data.vertices], textures)
+            [[(g.group, g.weight) for g in v.groups] for v in obj.data.vertices], textures, colors)
 
 
 def start_paint_navigation():
@@ -535,7 +545,8 @@ def check_paint_navigation(mode):
 
 def check_paint_cancel(mode):
     check(bpy.context.mode == mode and not addon._running and close_to(initial[0], snapshot()[0])
-          and paint_snapshot() == original_paint_data, mode + " navigation leaves mesh, weights, and texture pixels intact")
+          and paint_snapshot() == original_paint_data,
+          mode + " navigation leaves mesh, weights, texture pixels, and vertex colors intact")
     # A short click must follow the native panel path without exceptions.
     event("RIGHTMOUSE")
 
@@ -545,8 +556,42 @@ def release_click():
 
 
 def check_paint_click(mode):
-    check(not addon._running and bpy.context.mode == mode, mode + " short click restores the native context panel")
+    check(not addon._running and bpy.context.mode == mode, mode + " short click restores the native context UI")
     event("ESC")
+
+
+def pose_snapshot():
+    obj = bpy.context.active_object
+    return ([(b.name, tuple(b.head_local), tuple(b.tail_local)) for b in obj.data.bones],
+            [(b.name, tuple(tuple(row) for row in b.matrix_basis)) for b in obj.pose.bones])
+
+
+def setup_pose():
+    window, area, region = context()
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.armature_add()
+        bpy.ops.object.mode_set(mode="POSE")
+    bpy.context.active_object.pose.bones[0].rotation_euler.z = 0.2
+
+
+def start_pose_navigation():
+    global original_pose
+    original_pose = pose_snapshot()
+    start_fly()
+
+
+def check_pose_navigation():
+    check(bpy.context.mode == "POSE" and len(addon._running) == 1
+          and not close_to(initial[0], snapshot()[0]), "pose mode supports RMB and WASD movement")
+    event("ESC")
+
+
+def check_pose_cancel():
+    check(not addon._running and bpy.context.mode == "POSE"
+          and close_to(initial[0], snapshot()[0]) and pose_snapshot() == original_pose,
+          "pose navigation restores the view without changing bones or pose channels")
+    event("RIGHTMOUSE")
 
 
 def finish():
@@ -568,7 +613,7 @@ tasks = [lambda: event("ESC"), setup, lambda: event("W"), lambda: tool_is("built
          start_fly, test_fly_motion, test_cancel,
          start_fly, press_forward, release_forward, test_release,
          start_fly, test_unregister_active, begin_orbit, drag_orbit, check_orbit,
-         edit_mesh, start_fly, check_edit_fly, object_mode,
+         edit_mesh, start_fly, press_forward, check_edit_fly, object_mode,
          lambda: begin_drag("MIDDLEMOUSE"), lambda: drag("MIDDLEMOUSE"), check_pan,
          lambda: begin_drag("RIGHTMOUSE", alt=True), lambda: drag("RIGHTMOUSE", alt=True), check_zoom,
          focus, check_focus, ortho, start_fly, press_right, check_ortho_motion,
@@ -589,7 +634,12 @@ tasks[-1:-1] = [check_fov, check_fov_projection,
                release_click, lambda: check_paint_click("PAINT_WEIGHT"),
                lambda: paint_mode("TEXTURE_PAINT"), start_paint_navigation, press_forward,
                lambda: check_paint_navigation("PAINT_TEXTURE"), lambda: check_paint_cancel("PAINT_TEXTURE"),
-               release_click, lambda: check_paint_click("PAINT_TEXTURE"), object_mode]
+               release_click, lambda: check_paint_click("PAINT_TEXTURE"),
+               lambda: paint_mode("VERTEX_PAINT"), start_paint_navigation, press_forward,
+               lambda: check_paint_navigation("PAINT_VERTEX"), lambda: check_paint_cancel("PAINT_VERTEX"),
+               release_click, lambda: check_paint_click("PAINT_VERTEX"),
+               setup_pose, start_pose_navigation, press_forward, check_pose_navigation, check_pose_cancel,
+               release_click, lambda: check_paint_click("POSE"), object_mode]
 
 
 def tick():

@@ -35,13 +35,13 @@ else:
     for name, value in values.items():
         setattr(prefs, name, value)
 bpy.ops.wm.save_userpref()
-assert len(addon._keymaps) == 36, "Installed extension did not create expected bindings"
+assert len(addon._keymaps) == 37, "Installed extension did not create expected bindings"
 entry.preferences.navigation = False
 assert len(addon._keymaps) == 9
 entry.preferences.navigation = True
-assert len(addon._keymaps) == 36
+assert len(addon._keymaps) == 37
 addon.unregister()
 assert not addon._keymaps
 addon.register()
-assert len(addon._keymaps) == 36
+assert len(addon._keymaps) == 37
 print("INSTALLED EXTENSION CHECK PASSED", bpy.app.version_string, module, flush=True)

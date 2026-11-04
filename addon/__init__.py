@@ -13,12 +13,13 @@ from .motion import integrate_velocity, movement_axes
 _keymaps = []
 _running = set()
 _registered = False
-_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_WEIGHT", "PAINT_TEXTURE"}
+_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_VERTEX", "PAINT_WEIGHT", "PAINT_TEXTURE"}
 _MODE_MAPS = ("Object Mode", "Mesh", "Pose")
 _PAINT_PANELS = {
     "SCULPT": "VIEW3D_PT_sculpt_context_menu",
     "PAINT_WEIGHT": "VIEW3D_PT_paint_weight_context_menu",
     "PAINT_TEXTURE": "VIEW3D_PT_paint_texture_context_menu",
+    "PAINT_VERTEX": "VIEW3D_PT_paint_vertex_context_menu",
 }
 
 
@@ -66,7 +67,7 @@ def _install_keymaps(context):
             _add_key(km, "view3d.move", "LEFTMOUSE", alt=True, ctrl=True)
             _add_key(km, "view3d.zoom", "RIGHTMOUSE", alt=True)
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
-        for name in ("Sculpt", "Weight Paint", "Image Paint"):
+        for name in ("Sculpt", "Weight Paint", "Image Paint", "Vertex Paint"):
             # Preserve paint-specific chords such as Alt-LMB bone selection.
             km = kc.keymaps.new(name=name, space_type="EMPTY")
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
