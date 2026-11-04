@@ -13,13 +13,40 @@ from .motion import integrate_velocity, movement_axes
 _keymaps = []
 _running = set()
 _registered = False
-_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_VERTEX", "PAINT_WEIGHT", "PAINT_TEXTURE"}
+_MODES = {
+    "OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_VERTEX", "PAINT_WEIGHT", "PAINT_TEXTURE",
+    "EDIT_ARMATURE", "EDIT_CURVE", "EDIT_CURVES", "EDIT_SURFACE", "EDIT_TEXT",
+    "EDIT_METABALL", "EDIT_LATTICE", "EDIT_POINT_CLOUD", "PARTICLE", "SCULPT_CURVES",
+    "EDIT_GREASE_PENCIL", "PAINT_GREASE_PENCIL", "SCULPT_GREASE_PENCIL",
+    "WEIGHT_GREASE_PENCIL", "VERTEX_GREASE_PENCIL",
+}
 _MODE_MAPS = ("Object Mode", "Mesh", "Pose")
+_EXTRA_MODE_MAPS = (
+    "Sculpt", "Weight Paint", "Image Paint", "Vertex Paint", "Armature", "Curve", "Curves",
+    "Font", "Metaball", "Lattice", "Point Cloud", "Particle", "Sculpt Curves",
+    "Grease Pencil Edit Mode", "Grease Pencil Paint Mode", "Grease Pencil Sculpt Mode",
+    "Grease Pencil Weight Paint", "Grease Pencil Vertex Paint",
+)
+_EDIT_TOOL_MAPS = ("Mesh", "Armature", "Curve", "Curves", "Metaball", "Lattice", "Grease Pencil Edit Mode")
+_EDIT_TOOL_MODES = {"EDIT_MESH", "EDIT_ARMATURE", "EDIT_CURVE", "EDIT_CURVES", "EDIT_SURFACE",
+                    "EDIT_METABALL", "EDIT_LATTICE", "EDIT_GREASE_PENCIL"}
+_CONTEXT_MENUS = {
+    "OBJECT": "VIEW3D_MT_object_context_menu", "EDIT_MESH": "VIEW3D_MT_edit_mesh_context_menu",
+    "POSE": "VIEW3D_MT_pose_context_menu", "EDIT_ARMATURE": "VIEW3D_MT_armature_context_menu",
+    "EDIT_CURVE": "VIEW3D_MT_edit_curve_context_menu", "EDIT_SURFACE": "VIEW3D_MT_edit_curve_context_menu",
+    "EDIT_CURVES": "VIEW3D_MT_edit_curves_context_menu", "EDIT_TEXT": "VIEW3D_MT_edit_font_context_menu",
+    "EDIT_METABALL": "VIEW3D_MT_edit_metaball_context_menu", "EDIT_LATTICE": "VIEW3D_MT_edit_lattice_context_menu",
+    "PARTICLE": "VIEW3D_MT_particle_context_menu", "EDIT_GREASE_PENCIL": "VIEW3D_MT_greasepencil_edit_context_menu",
+}
 _PAINT_PANELS = {
     "SCULPT": "VIEW3D_PT_sculpt_context_menu",
     "PAINT_WEIGHT": "VIEW3D_PT_paint_weight_context_menu",
     "PAINT_TEXTURE": "VIEW3D_PT_paint_texture_context_menu",
     "PAINT_VERTEX": "VIEW3D_PT_paint_vertex_context_menu",
+    "PAINT_GREASE_PENCIL": "VIEW3D_PT_greasepencil_draw_context_menu",
+    "SCULPT_GREASE_PENCIL": "VIEW3D_PT_greasepencil_sculpt_context_menu",
+    "WEIGHT_GREASE_PENCIL": "VIEW3D_PT_greasepencil_weight_context_menu",
+    "VERTEX_GREASE_PENCIL": "VIEW3D_PT_greasepencil_vertex_paint_context_menu",
 }
 
 
@@ -67,7 +94,7 @@ def _install_keymaps(context):
             _add_key(km, "view3d.move", "LEFTMOUSE", alt=True, ctrl=True)
             _add_key(km, "view3d.zoom", "RIGHTMOUSE", alt=True)
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
-        for name in ("Sculpt", "Weight Paint", "Image Paint", "Vertex Paint"):
+        for name in _EXTRA_MODE_MAPS:
             # Preserve paint-specific chords such as Alt-LMB bone selection.
             km = kc.keymaps.new(name=name, space_type="EMPTY")
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
@@ -80,6 +107,11 @@ def _install_keymaps(context):
                               ("R", "builtin.scale")):
                 _add_key(km, "view3d.unity_tool", key, {"tool": tool})
             _add_key(km, "view3d.unity_frame", "F")
+    if setting(context, "edit_tools", False):
+        for name in ("3D View",) + _EDIT_TOOL_MAPS:
+            km = kc.keymaps.new(name=name, space_type="VIEW_3D" if name == "3D View" else "EMPTY")
+            for key, tool in (("W", "builtin.move"), ("E", "builtin.rotate"), ("R", "builtin.scale")):
+                _add_key(km, "view3d.unity_edit_tool", key, {"tool": tool})
     if setting(context, "outliner_hierarchy", True):
         km = kc.keymaps.new(name="Outliner", space_type="OUTLINER")
         _add_key(km, "outliner.item_openclose", "LEFTMOUSE", {"all": True},
@@ -152,12 +184,34 @@ def _draw_navigation_settings(layout, prefs, space=None):
             box.prop(prefs, name)
 
 
+def _draw_edit_tools(layout, context, prefs):
+    if context.mode not in _EDIT_TOOL_MODES:
+        return
+    box = layout.box()
+    row = box.row(align=True)
+    for tool, label in (("builtin.move", "移動"), ("builtin.rotate", "回転"), ("builtin.scale", "拡縮")):
+        row.operator("view3d.unity_edit_tool", text=label).tool = tool
+    box.prop(prefs, "edit_tools")
+    box.prop(context.scene.transform_orientation_slots[0], "type", text="ギズモ座標")
+    if context.mode != "EDIT_ARMATURE":
+        settings = context.scene.tool_settings
+        box.prop(settings, "use_proportional_edit", text="プロポーショナル編集")
+        col = box.column()
+        col.active = settings.use_proportional_edit
+        col.prop(settings, "proportional_distance", text="影響半径")
+        col.prop(settings, "proportional_edit_falloff", text="減衰")
+        col.prop(settings, "use_proportional_connected", text="接続のみ")
+        col.prop(settings, "use_proportional_projected", text="投影")
+
+
 class UnityViewPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     navigation: BoolProperty(name="Unity形式の視点操作", default=True, update=_update_keymaps)
     object_tools: BoolProperty(name="オブジェクトモードでW/E/R・Fを使用", default=True,
                                update=_update_keymaps)
+    edit_tools: BoolProperty(name="編集モードでW/E/Rを使用", description="Eの押し出しなど標準ショートカットをギズモ切替へ置き換えます",
+                             default=False, update=_update_keymaps)
     outliner_hierarchy: BoolProperty(name="コレクション・オブジェクトの一括開閉", default=True,
                                      update=_update_keymaps)
     fly_speed: FloatProperty(name="移動速度", default=5.0, min=0.01, max=10000.0)
@@ -193,6 +247,7 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
         col.label(text="操作")
         col.prop(self, "navigation")
         col.prop(self, "object_tools")
+        col.prop(self, "edit_tools")
         col.prop(self, "outliner_hierarchy")
         box = self.layout.box()
         box.label(text="フライスルー")
@@ -212,6 +267,7 @@ class VIEW3D_PT_unity_view(bpy.types.Panel):
         return preferences(context) is not None
 
     def draw(self, context):
+        _draw_edit_tools(self.layout, context, preferences(context))
         _draw_navigation_settings(self.layout, preferences(context), context.space_data)
 
 
@@ -244,6 +300,24 @@ class VIEW3D_OT_unity_frame(bpy.types.Operator):
 
     def execute(self, context):
         return bpy.ops.view3d.view_selected("INVOKE_DEFAULT", use_all_regions=False)
+
+
+class VIEW3D_OT_unity_edit_tool(bpy.types.Operator):
+    bl_idname = "view3d.unity_edit_tool"
+    bl_label = "編集ギズモ切替"
+    bl_options = {"INTERNAL"}
+
+    tool: StringProperty()
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == "VIEW_3D" and context.mode in _EDIT_TOOL_MODES
+
+    def execute(self, context):
+        bpy.ops.wm.tool_set_by_id(name=self.tool)
+        context.space_data.show_gizmo = True
+        context.space_data.show_gizmo_tool = True
+        return {"FINISHED"}
 
 
 class VIEW3D_OT_unity_fly(bpy.types.Operator):
@@ -379,11 +453,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             if not self._used:
                 if self._mode in _PAINT_PANELS:
                     bpy.ops.wm.call_panel(name=_PAINT_PANELS[self._mode])
-                else:
-                    menu = {"OBJECT": "VIEW3D_MT_object_context_menu",
-                            "EDIT_MESH": "VIEW3D_MT_edit_mesh_context_menu",
-                            "POSE": "VIEW3D_MT_pose_context_menu"}[self._mode]
-                    bpy.ops.wm.call_menu(name=menu)
+                elif self._mode in _CONTEXT_MENUS:
+                    bpy.ops.wm.call_menu(name=_CONTEXT_MENUS[self._mode])
             return {"FINISHED"}
         if event.type in {"W", "A", "S", "D", "Q", "E"}:
             if event.value == "PRESS":
@@ -413,7 +484,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
 
 
 _CLASSES = (UnityViewPreferences, VIEW3D_PT_unity_view, VIEW3D_OT_unity_tool,
-            VIEW3D_OT_unity_frame, VIEW3D_OT_unity_fly)
+            VIEW3D_OT_unity_frame, VIEW3D_OT_unity_edit_tool, VIEW3D_OT_unity_fly)
 
 
 def register():

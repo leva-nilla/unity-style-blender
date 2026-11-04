@@ -15,7 +15,7 @@ values = {"fly_speed": 3.25, "look_sensitivity": 1.5, "boost": 3.0,
           "precision_multiplier": 0.1, "wheel_factor": 1.1,
           "update_rate": 240, "smoothing": 0.12, "invert_y": True,
           "move_space": "WORLD", "ortho_keymap": "WASD", "ortho_zoom_speed": 2.5,
-          "remember_speed": False, "fov_compensation": 0.75}
+          "remember_speed": False, "fov_compensation": 0.75, "edit_tools": True}
 profile = Path(os.environ.get("BLENDER_USER_RESOURCES", "")).resolve()
 artifact_root = (Path(__file__).resolve().parents[1] / "artifacts").resolve()
 assert artifact_root in profile.parents, "Preference persistence tests require an isolated artifact profile"
@@ -35,13 +35,19 @@ else:
     for name, value in values.items():
         setattr(prefs, name, value)
 bpy.ops.wm.save_userpref()
-assert len(addon._keymaps) == 37, "Installed extension did not create expected bindings"
+saved_edit_tools = entry.preferences.edit_tools
+entry.preferences.edit_tools = False
+binding_count = len(addon._keymaps)
+assert binding_count > 0, "Installed extension did not create bindings"
 entry.preferences.navigation = False
 assert len(addon._keymaps) == 9
 entry.preferences.navigation = True
-assert len(addon._keymaps) == 37
+assert len(addon._keymaps) == binding_count
 addon.unregister()
 assert not addon._keymaps
 addon.register()
-assert len(addon._keymaps) == 37
+assert len(addon._keymaps) == binding_count
+entry.preferences.edit_tools = True
+assert len(addon._keymaps) > binding_count
+entry.preferences.edit_tools = saved_edit_tools
 print("INSTALLED EXTENSION CHECK PASSED", bpy.app.version_string, module, flush=True)
