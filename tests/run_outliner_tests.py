@@ -39,8 +39,8 @@ def event(kind, value="PRESS", *, row=1, x=120, **modifiers):
     window.event_simulate(type=kind, value=value, x=region.x + px, y=region.y + py, **modifiers)
 
 
-def click(row, *, triangle=False, alt=False):
-    x = 30 if triangle else 120
+def click(row, *, triangle=False, alt=False, triangle_x=30):
+    x = triangle_x if triangle else 180
     event("MOUSEMOVE", "NOTHING", row=row, x=x, alt=alt)
     event("LEFTMOUSE", row=row, x=x, alt=alt)
     event("LEFTMOUSE", "RELEASE", row=row, x=x, alt=alt)
@@ -66,6 +66,12 @@ def setup():
     target.children.link(child)
     child.children.link(grandchild)
     grandchild.objects.link(leaf)
+    object_child = bpy.data.objects.new("04_ObjectChild", None)
+    object_grandchild = bpy.data.objects.new("05_ObjectGrandchild", None)
+    grandchild.objects.link(object_child)
+    grandchild.objects.link(object_grandchild)
+    object_child.parent = leaf
+    object_grandchild.parent = object_child
     other = bpy.data.collections.new("99_Other")
     other_child = bpy.data.collections.new("99_Child")
     scene.collection.children.link(other)
@@ -80,8 +86,11 @@ def setup():
 
 def data_snapshot():
     scene = bpy.context.window_manager.windows[0].scene
-    return [(c.name, tuple(ch.name for ch in c.children), tuple(o.name for o in c.objects),
-             c.hide_viewport, c.hide_render) for c in scene.collection.children_recursive]
+    collections = [(c.name, tuple(ch.name for ch in c.children), tuple(o.name for o in c.objects),
+                    c.hide_viewport, c.hide_render) for c in scene.collection.children_recursive]
+    objects = [(o.name, o.parent.name if o.parent else None, o.hide_viewport, o.hide_render)
+               for o in scene.objects]
+    return collections, objects
 
 
 def collapse_all():
@@ -96,7 +105,7 @@ def menu_action(expand):
     with bpy.context.temp_override(window=window, area=area, region=region):
         result = bpy.ops.outliner.select_walk("INVOKE_REGION_WIN", direction="RIGHT" if expand else "LEFT",
                                               toggle_all=True)
-    check(result == {"FINISHED"}, "collection menu action " + ("expand" if expand else "collapse"))
+    check(result == {"FINISHED"}, "hierarchy menu action " + ("expand" if expand else "collapse"))
 
 
 def finish():
@@ -114,10 +123,17 @@ def finish():
 
 tasks = [setup, collapse_all, lambda: click(1), lambda: selected("00_Target"),
          lambda: click(1, triangle=True, alt=True), lambda: click(4), lambda: selected("03_Leaf"),
-         lambda: click(5), lambda: selected("99_Other"),
+         lambda: click(7), lambda: selected("99_Other"),
          lambda: click(1, triangle=True, alt=True), lambda: click(2), lambda: selected("99_Other"),
          lambda: click(1), lambda: menu_action(True), lambda: click(4), lambda: selected("03_Leaf"),
          lambda: click(1), lambda: menu_action(False), lambda: click(2), lambda: selected("99_Other"),
+         lambda: click(1), lambda: menu_action(True),
+         lambda: click(4, triangle=True, alt=True, triangle_x=90),
+         lambda: click(5), lambda: selected("99_Other"),
+         lambda: click(4, triangle=True, alt=True, triangle_x=90),
+         lambda: click(6), lambda: selected("05_ObjectGrandchild"),
+         lambda: click(4), lambda: menu_action(False), lambda: click(5), lambda: selected("99_Other"),
+         lambda: click(4), lambda: menu_action(True), lambda: click(6), lambda: selected("05_ObjectGrandchild"),
          finish]
 
 

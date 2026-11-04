@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 import traceback
+from unittest.mock import patch
 
 import bpy
 from mathutils import Vector
@@ -93,6 +94,9 @@ def start_fly():
 def test_fly_motion():
     check(len(addon._running) == 1, "RMB key dispatch starts exactly one fly operator")
     fly = next(iter(addon._running))
+    check(abs(fly._timer.time_step - 1 / 120) < 0.000001, "default navigation requests 120 Hz updates")
+    # The following checks exercise immediate speed mode, independently of easing.
+    fly._smoothing = 0
     eye = fly._eye()
     fly._look(80, 30)
     check(close_to(fly._eye(), eye), "look rotates around the eye without orbiting")
@@ -112,7 +116,27 @@ def test_fly_motion():
     start = fly._view.view_location.copy()
     fly._step(1.0)
     check(abs((fly._view.view_location - start).z + 20) < 0.0001, "Shift boosts movement")
+    fly._shift = False
+    fly._ctrl = True
+    start = fly._view.view_location.copy()
+    fly._step(1.0)
+    check(abs((fly._view.view_location - start).z + 1.25) < 0.0001, "Ctrl enables precise quarter-speed movement")
+    fly._ctrl = False
     fly._keys.clear()
+    # A press and release entirely between timer ticks must still move the view.
+    start = fly._view.view_location.copy()
+    now = addon.time.perf_counter()
+    fly._last = now
+    window, area, region = context()
+    from types import SimpleNamespace
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        with patch.object(addon.time, "perf_counter", return_value=now + 0.004):
+            fly.modal(bpy.context, SimpleNamespace(type="W", value="PRESS", shift=False, ctrl=False))
+        with patch.object(addon.time, "perf_counter", return_value=now + 0.009):
+            fly.modal(bpy.context, SimpleNamespace(type="W", value="RELEASE", shift=False, ctrl=False))
+    fly._last = addon.time.perf_counter()
+    check(abs((fly._view.view_location - start).length - 0.025) < 0.0001,
+          "a 5 ms key tap is integrated even between timer events")
     event("ESC")
 
 
@@ -255,6 +279,21 @@ def check_preferences():
     entry = bpy.context.preferences.addons.new()
     entry.module = addon.__package__
     prefs = entry.preferences
+    check(abs(prefs.look_sensitivity - 3.5) < 0.00001, "new default sensitivity matches the user's DPI1600 setting")
+    window, area, region = context()
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        check(addon.VIEW3D_PT_unity_view.poll(bpy.context), "View sidebar sensitivity is available with the add-on enabled")
+    prefs.sensitivity = 0.003  # Previously saved internal angle.
+    check(abs(prefs.look_sensitivity - 6.0) < 0.0001, "legacy sensitivity is preserved by the multiplier display")
+    prefs.look_sensitivity = 1.0
+    baseline = prefs.sensitivity
+    prefs.look_sensitivity = 1.01
+    check(abs(prefs.sensitivity - baseline - 0.000005) < 0.0000001,
+          "a 0.01 sensitivity adjustment changes the internal angle by five millionths")
+    prefs.look_sensitivity = 0.01
+    check(abs(prefs.sensitivity - 0.000005) < 0.0000001, "very low sensitivity remains selectable")
+    prefs.look_sensitivity = 100
+    check(abs(prefs.sensitivity - 0.05) < 0.0000001, "high sensitivity remains selectable")
     prefs.navigation = False
     check(len(addon._keymaps) == 9, "navigation can be disabled independently")
     prefs.object_tools = False
@@ -267,6 +306,43 @@ def check_preferences():
     prefs.outliner_hierarchy = True
     check(len(addon._keymaps) == 33, "preference toggles restore bindings without duplicates")
     bpy.context.preferences.addons.remove(entry)
+
+
+def configured_fly_start():
+    global configured_entry
+    configured_entry = bpy.context.preferences.addons.new()
+    configured_entry.module = addon.__package__
+    prefs = configured_entry.preferences
+    prefs.fly_speed = 7
+    prefs.update_rate = 240
+    prefs.smoothing = 0.12
+    prefs.precision_multiplier = 0.1
+    prefs.wheel_factor = 1.5
+    prefs.invert_y = True
+    start_fly()
+
+
+def check_configured_fly():
+    fly = next(iter(addon._running))
+    check(abs(fly._timer.time_step - 1 / 240) < 0.000001 and fly._speed == 7
+          and abs(fly._smoothing - 0.12) < 0.00001 and abs(fly._precision - 0.1) < 0.00001,
+          "custom rate, speed, easing, and precision settings reach live navigation")
+    forward_before = (fly._view.view_rotation @ Vector((0, 0, -1))).z
+    fly._look(0, 30)
+    check((fly._view.view_rotation @ Vector((0, 0, -1))).z < forward_before,
+          "invert Y reverses mouse look")
+    event("WHEELUPMOUSE")
+
+
+def check_configured_wheel():
+    check(abs(next(iter(addon._running))._speed - 10.5) < 0.0001,
+          "configured wheel factor controls navigation speed changes")
+    event("ESC")
+
+
+def clear_configured_preferences():
+    check(not addon._running, "configured navigation still cancels cleanly")
+    bpy.context.preferences.addons.remove(configured_entry)
 
 
 def finish():
@@ -292,7 +368,8 @@ tasks = [lambda: event("ESC"), setup, lambda: event("W"), lambda: tool_is("built
          lambda: begin_drag("MIDDLEMOUSE"), lambda: drag("MIDDLEMOUSE"), check_pan,
          lambda: begin_drag("RIGHTMOUSE", alt=True), lambda: drag("RIGHTMOUSE", alt=True), check_zoom,
          focus, check_focus, ortho, start_fly, press_forward, check_perspective, check_ortho_cancel,
-         check_camera_guard, check_preferences, finish]
+         check_camera_guard, check_preferences, configured_fly_start, check_configured_fly,
+         check_configured_wheel, clear_configured_preferences, finish]
 
 
 def tick():

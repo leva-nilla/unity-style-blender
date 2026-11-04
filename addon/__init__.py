@@ -4,8 +4,10 @@ import math
 import time
 
 import bpy
-from bpy.props import BoolProperty, FloatProperty, StringProperty
+from bpy.props import BoolProperty, FloatProperty, IntProperty, StringProperty
 from mathutils import Quaternion, Vector
+
+from .motion import integrate_velocity
 
 
 _keymaps = []
@@ -74,7 +76,7 @@ def _install_keymaps(context):
                  value="CLICK", alt=True)
 
 
-def _draw_collection_hierarchy(self, context):
+def _draw_hierarchy(self, context):
     if not setting(context, "outliner_hierarchy", True):
         return
     self.layout.separator()
@@ -95,27 +97,69 @@ def _update_keymaps(self, context):
         _install_keymaps(context)
 
 
+def _get_look_sensitivity(self):
+    return self.sensitivity / 0.0005
+
+
+def _set_look_sensitivity(self, value):
+    self.sensitivity = value * 0.0005
+
+
 class UnityViewPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     navigation: BoolProperty(name="Unity形式の視点操作", default=True, update=_update_keymaps)
     object_tools: BoolProperty(name="オブジェクトモードでW/E/R・Fを使用", default=True,
                                update=_update_keymaps)
-    outliner_hierarchy: BoolProperty(name="コレクションの一括開閉", default=True,
+    outliner_hierarchy: BoolProperty(name="コレクション・オブジェクトの一括開閉", default=True,
                                      update=_update_keymaps)
     fly_speed: FloatProperty(name="移動速度", default=5.0, min=0.01, max=10000.0)
-    sensitivity: FloatProperty(name="見回し感度", default=0.003, min=0.0001, max=0.03,
-                               precision=4)
+    # Keep the stored radians/pixel value compatible with earlier releases.
+    # The UI uses a multiplier so Blender's minimum drag step (0.01) is useful.
+    sensitivity: FloatProperty(default=0.00175, min=0.000001, max=0.05, options={"HIDDEN"})
+    look_sensitivity: FloatProperty(name="見回し感度", description="1.0を基準とした倍率。Shiftを押しながらドラッグすると微調整できます",
+                                    default=3.5, min=0.002, max=100.0, soft_min=0.01, soft_max=10.0,
+                                    step=1, precision=3, get=_get_look_sensitivity, set=_set_look_sensitivity)
     boost: FloatProperty(name="Shiftの速度倍率", default=4.0, min=1.0, max=20.0)
+    precision_multiplier: FloatProperty(name="Ctrlの微速倍率", default=0.25, min=0.01, max=1.0)
+    wheel_factor: FloatProperty(name="ホイールの速度倍率", default=1.2, min=1.01, max=3.0)
+    update_rate: IntProperty(name="更新頻度 (Hz)", description="移動更新の要求頻度。実際の描画頻度はシーンの負荷によります",
+                             default=120, min=30, max=240)
+    smoothing: FloatProperty(name="移動の滑らかさ (秒)", description="加減速の応答時間。0で即座に速度を切り替えます",
+                              default=0.06, min=0.0, max=0.5, precision=3)
+    invert_y: BoolProperty(name="見回しの上下を反転", default=False)
 
     def draw(self, context):
-        col = self.layout.column()
+        self.layout.use_property_split = True
+        self.layout.use_property_decorate = False
+        col = self.layout.box().column()
+        col.label(text="操作")
         col.prop(self, "navigation")
         col.prop(self, "object_tools")
         col.prop(self, "outliner_hierarchy")
-        col.prop(self, "fly_speed")
-        col.prop(self, "sensitivity")
-        col.prop(self, "boost")
+        col = self.layout.box().column()
+        col.label(text="フライスルー")
+        col.active = self.navigation
+        for name in ("fly_speed", "look_sensitivity", "boost", "precision_multiplier",
+                     "wheel_factor", "update_rate", "smoothing", "invert_y"):
+            col.prop(self, name)
+
+
+class VIEW3D_PT_unity_view(bpy.types.Panel):
+    bl_label = "Unity View Controls"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "View"
+    bl_parent_id = "VIEW3D_PT_view3d_properties"
+
+    @classmethod
+    def poll(cls, context):
+        return preferences(context) is not None
+
+    def draw(self, context):
+        self.layout.use_property_split = True
+        self.layout.use_property_decorate = False
+        self.layout.prop(preferences(context), "look_sensitivity")
 
 
 class VIEW3D_OT_unity_tool(bpy.types.Operator):
@@ -172,16 +216,22 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self._last = time.perf_counter()
         self._keys = set()
         self._shift = event.shift
+        self._ctrl = event.ctrl
         self._speed = setting(context, "fly_speed", 5.0)
-        self._sensitivity = setting(context, "sensitivity", 0.003)
+        self._sensitivity = setting(context, "sensitivity", 0.00175)
         self._boost = setting(context, "boost", 4.0)
+        self._precision = setting(context, "precision_multiplier", 0.25)
+        self._wheel_factor = setting(context, "wheel_factor", 1.2)
+        self._smoothing = setting(context, "smoothing", 0.06)
+        self._invert_y = setting(context, "invert_y", False)
+        self._velocity = Vector((0, 0, 0))
         self._used = False
         self._stopped = False
         self._mode = context.mode
-        self._timer = self._wm.event_timer_add(1.0 / 60.0, window=context.window)
+        self._timer = self._wm.event_timer_add(1.0 / setting(context, "update_rate", 120), window=context.window)
         self._wm.modal_handler_add(self)
         _running.add(self)
-        self._area.header_text_set("Unity View · RMB: 終了  WASD: 移動  Q/E: 下降/上昇  Shift: 加速  Esc: 戻す")
+        self._area.header_text_set("Unity View · RMB: 終了  WASD: 移動  Q/E: 下降/上昇  Shift: 加速  Ctrl: 微速  Esc: 戻す")
         return {"RUNNING_MODAL"}
 
     def _eye(self):
@@ -189,6 +239,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
                 + self._view.view_rotation @ Vector((0, 0, self._view.view_distance)))
 
     def _look(self, dx, dy):
+        if self._invert_y:
+            dy = -dy
         eye = self._eye()
         rotation = self._view.view_rotation
         yaw = Quaternion((0, 0, 1), -dx * self._sensitivity)
@@ -208,7 +260,14 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         if motion.length_squared:
             # The same speed on diagonals; Q/E use Blender world-up (Z).
             motion.normalize()
-            self._view.view_location += motion * self._speed * seconds * (self._boost if self._shift else 1)
+        speed = self._speed * (self._boost if self._shift else 1) * (self._precision if self._ctrl else 1)
+        self._velocity, displacement = integrate_velocity(self._velocity, motion * speed, seconds, self._smoothing)
+        self._view.view_location += displacement
+
+    def _advance(self):
+        now = time.perf_counter()
+        self._step(max(0.0, min(0.1, now - self._last)))
+        self._last = now
 
     def _perspective(self):
         if self._view.view_perspective == "ORTHO":
@@ -241,7 +300,11 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
                 or context.mode != self._mode):
             self.stop(restore=True)
             return {"CANCELLED"}
+        # Account for the elapsed time using the previous keys/rotation/speed,
+        # then apply the new input. This avoids quantizing taps to timer ticks.
+        self._advance()
         self._shift = event.shift
+        self._ctrl = event.ctrl
         if event.type == "RIGHTMOUSE" and event.value == "RELEASE":
             self.stop()
             if not self._used:
@@ -267,12 +330,9 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
                 self._perspective()
                 self._look(dx, dy)
         elif event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
-            self._speed = max(0.01, min(10000.0, self._speed * (1.2 if event.type == "WHEELUPMOUSE" else 1 / 1.2)))
+            factor = self._wheel_factor if event.type == "WHEELUPMOUSE" else 1 / self._wheel_factor
+            self._speed = max(0.01, min(10000.0, self._speed * factor))
             self._used = True
-        elif event.type == "TIMER":
-            now = time.perf_counter()
-            self._step(max(0.0, min(0.1, now - self._last)))
-            self._last = now
         self._area.tag_redraw()
         return {"RUNNING_MODAL"}
 
@@ -280,7 +340,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self.stop(restore=True)
 
 
-_CLASSES = (UnityViewPreferences, VIEW3D_OT_unity_tool, VIEW3D_OT_unity_frame, VIEW3D_OT_unity_fly)
+_CLASSES = (UnityViewPreferences, VIEW3D_PT_unity_view, VIEW3D_OT_unity_tool,
+            VIEW3D_OT_unity_frame, VIEW3D_OT_unity_fly)
 
 
 def register():
@@ -291,7 +352,8 @@ def register():
         bpy.utils.register_class(cls)
     _registered = True
     _install_keymaps(bpy.context)
-    bpy.types.OUTLINER_MT_collection.append(_draw_collection_hierarchy)
+    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
+        menu.append(_draw_hierarchy)
 
 
 def unregister():
@@ -301,7 +363,8 @@ def unregister():
     for operator in tuple(_running):
         operator.stop(restore=True)
     _remove_keymaps()
-    bpy.types.OUTLINER_MT_collection.remove(_draw_collection_hierarchy)
+    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
+        menu.remove(_draw_hierarchy)
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)
     _registered = False
