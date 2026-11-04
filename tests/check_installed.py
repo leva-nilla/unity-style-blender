@@ -17,7 +17,7 @@ values = {"fly_speed": 3.25, "look_sensitivity": 1.5, "boost": 3.0,
           "move_space": "WORLD", "ortho_keymap": "WASD", "ortho_zoom_speed": 2.5,
           "remember_speed": False, "fov_compensation": 0.75, "edit_tools": True,
           "extrude_key": "K", "extrude_shift": False, "extrude_ctrl": True, "extrude_alt": True,
-          "show_proportional_radius": False}
+          "show_proportional_radius": False, "axis_view_perspective": False}
 profile = Path(os.environ.get("BLENDER_USER_RESOURCES", "")).resolve()
 artifact_root = (Path(__file__).resolve().parents[1] / "artifacts").resolve()
 assert artifact_root in profile.parents, "Preference persistence tests require an isolated artifact profile"

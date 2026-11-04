@@ -21,9 +21,9 @@ _MODES = {
     "EDIT_GREASE_PENCIL", "PAINT_GREASE_PENCIL", "SCULPT_GREASE_PENCIL",
     "WEIGHT_GREASE_PENCIL", "VERTEX_GREASE_PENCIL",
 }
-_MODE_MAPS = ("Object Mode", "Mesh", "Pose")
+_MODE_MAPS = ("Object Mode", "Pose")
 _EXTRA_MODE_MAPS = (
-    "Sculpt", "Weight Paint", "Image Paint", "Vertex Paint", "Armature", "Curve", "Curves",
+    "Mesh", "Sculpt", "Weight Paint", "Image Paint", "Vertex Paint", "Armature", "Curve", "Curves",
     "Font", "Metaball", "Lattice", "Point Cloud", "Particle", "Sculpt Curves",
     "Grease Pencil Edit Mode", "Grease Pencil Paint Mode", "Grease Pencil Sculpt Mode",
     "Grease Pencil Weight Paint", "Grease Pencil Vertex Paint",
@@ -103,16 +103,18 @@ def _install_keymaps(context):
         # Mode maps are considered before the general 3D View map (e.g. mesh loop select).
         for name in ("3D View",) + _MODE_MAPS:
             km = kc.keymaps.new(name=name, space_type="VIEW_3D" if name == "3D View" else "EMPTY")
-            _add_key(km, "view3d.rotate", "LEFTMOUSE", alt=True)
+            _add_key(km, "view3d.unity_alt_drag", "LEFTMOUSE", {"action": "ROTATE"}, alt=True)
             _add_key(km, "view3d.move", "MIDDLEMOUSE")
             _add_key(km, "view3d.move", "MIDDLEMOUSE", alt=True)
-            _add_key(km, "view3d.move", "LEFTMOUSE", alt=True, ctrl=True)
+            _add_key(km, "view3d.unity_alt_drag", "LEFTMOUSE", {"action": "MOVE"}, alt=True, ctrl=True)
             _add_key(km, "view3d.zoom", "RIGHTMOUSE", alt=True)
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
         for name in _EXTRA_MODE_MAPS:
-            # Preserve paint-specific chords such as Alt-LMB bone selection.
+            # Preserve mesh loop/ring and mode-specific Alt-LMB bone selection.
             km = kc.keymaps.new(name=name, space_type="EMPTY")
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
+            if name == "Mesh":
+                _add_key(km, "view3d.rotate", "MIDDLEMOUSE", alt=True)
     if setting(context, "object_tools", True):
         # W lives in 3D View; R lives in Object Mode. Layer over both maps.
         # Operators poll for Object Mode so edit-mode modeling is preserved.
@@ -244,6 +246,7 @@ def _draw_navigation_settings(layout, prefs, space=None):
     col.separator()
     col.prop(prefs, "ortho_keymap")
     col.prop(prefs, "ortho_zoom_speed")
+    col.prop(prefs, "axis_view_perspective")
     col.separator()
     if space is not None:
         row = col.row()
@@ -311,6 +314,8 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
         ("QEAD", "QEADでパン・W/Sでズーム", "E/Qで上下、A/Dで左右、W/Sで拡大縮小"),
         ("WASD", "WASDでパン・Q/Eでズーム", "W/Sで上下、A/Dで左右、Q/Eで拡大縮小")), default="QEAD")
     ortho_zoom_speed: FloatProperty(name="平行投影ズーム倍率", default=3.0, min=0.01, max=20.0)
+    axis_view_perspective: BoolProperty(name="軸方向からは透視で移動", default=True,
+        description="正面・側面・上面などの軸方向平行投影では、移動や見回しを始めると透視投影へ切り替えます")
     fov_compensation: FloatProperty(name="FOV感度補正", description="0は補正なし、1は50mmより長い焦点距離で見回し感度を下げます",
                                     default=0.0, min=0.0, max=1.0, step=1)
     show_advanced: BoolProperty(name="詳細設定", default=False)
@@ -360,6 +365,27 @@ class VIEW3D_PT_unity_view(bpy.types.Panel):
     def draw(self, context):
         _draw_edit_tools(self.layout, context, preferences(context))
         _draw_navigation_settings(self.layout, preferences(context), context.space_data)
+
+
+class VIEW3D_OT_unity_alt_drag(bpy.types.Operator):
+    bl_idname = "view3d.unity_alt_drag"
+    bl_label = "Unity形式のAltドラッグ"
+    bl_options = {"INTERNAL"}
+
+    action: EnumProperty(items=(("ROTATE", "周回", ""), ("MOVE", "平行移動", "")), default="ROTATE")
+
+    @classmethod
+    def poll(cls, context):
+        # Native mesh loop/ring selection fires on CLICK; a global PRESS binding
+        # would consume it before the Mesh map gets a chance to handle the click.
+        return view_available(context) and context.mode != "EDIT_MESH"
+
+    def execute(self, context):
+        operator = bpy.ops.view3d.rotate if self.action == "ROTATE" else bpy.ops.view3d.move
+        if not operator.poll():
+            return {"CANCELLED"}
+        result = operator("INVOKE_DEFAULT")
+        return {"CANCELLED"} if "CANCELLED" in result else {"FINISHED"}
 
 
 class VIEW3D_OT_unity_tool(bpy.types.Operator):
@@ -451,6 +477,9 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self._wm = context.window_manager
         self._start = (self._view.view_location.copy(), self._view.view_rotation.copy(),
                        self._view.view_distance, self._view.view_perspective)
+        self._start_axis = self._view.is_orthographic_side_view
+        self._axis_ortho = (self._start_axis and self._view.view_perspective == "ORTHO"
+                            and setting(context, "axis_view_perspective", True))
         self._mouse = (event.mouse_x, event.mouse_y)
         self._origin = self._mouse
         self._last = time.perf_counter()
@@ -479,6 +508,13 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         _running.add(self)
         self._area.header_text_set("Unity View · RMB: 終了  WASD: 移動  Q/E: 下降/上昇  Shift: 加速  Ctrl: 微速  Esc: 戻す")
         return {"RUNNING_MODAL"}
+
+    def _use_navigation(self):
+        self._used = True
+        if self._axis_ortho:
+            self._view.view_perspective = "PERSP"
+            self._view.is_orthographic_side_view = False
+            self._axis_ortho = False
 
     def _eye(self):
         return (self._view.view_location
@@ -541,6 +577,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
                 self._view.view_rotation = rotation
                 self._view.view_distance = distance
                 self._view.view_perspective = perspective
+                self._view.is_orthographic_side_view = self._start_axis
             self._area.header_text_set(None)
             self._area.tag_redraw()
         except ReferenceError:
@@ -569,8 +606,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             return {"FINISHED"}
         if event.type in {"W", "A", "S", "D", "Q", "E"}:
             if event.value == "PRESS":
+                self._use_navigation()
                 self._keys.add(event.type)
-                self._used = True
             elif event.value == "RELEASE":
                 self._keys.discard(event.type)
         elif event.type == "MOUSEMOVE":
@@ -578,15 +615,16 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             dx, dy = x - self._mouse[0], y - self._mouse[1]
             self._mouse = (x, y)
             if not self._used:
-                self._used = (x - self._origin[0]) ** 2 + (y - self._origin[1]) ** 2 > 9
+                if (x - self._origin[0]) ** 2 + (y - self._origin[1]) ** 2 > 9:
+                    self._use_navigation()
             if self._used:
                 self._look(dx, dy)
         elif event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
+            self._use_navigation()
             factor = self._wheel_factor if event.type == "WHEELUPMOUSE" else 1 / self._wheel_factor
             self._speed = max(0.01, min(10000.0, self._speed * factor))
             if self._remember_speed and self._prefs is not None:
                 self._prefs.fly_speed = self._speed
-            self._used = True
         self._area.tag_redraw()
         return {"RUNNING_MODAL"}
 
@@ -594,7 +632,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self.stop(restore=True)
 
 
-_CLASSES = (UnityViewPreferences, VIEW3D_PT_unity_view, VIEW3D_OT_unity_tool,
+_CLASSES = (UnityViewPreferences, VIEW3D_PT_unity_view, VIEW3D_OT_unity_alt_drag, VIEW3D_OT_unity_tool,
             VIEW3D_OT_unity_frame, VIEW3D_OT_unity_edit_tool, VIEW3D_OT_unity_extrude, VIEW3D_OT_unity_fly)
 
 
