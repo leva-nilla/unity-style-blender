@@ -2,7 +2,7 @@
 
 [日本語](#ja) | [English](#en)
 
-[Download v0.1.10 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.10/unity_view_controls-0.1.10.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
+[Download v0.1.11 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.11/unity_view_controls-0.1.11.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
 
 <a id="ja"></a>
 
@@ -12,9 +12,9 @@ Blenderの3Dビュー操作をUnity Editorに寄せるアドオン。Blender 4.4
 
 ### 操作
 
-- Alt + 左ドラッグで周回、中ドラッグで平行移動、Alt + 右ドラッグでズーム。
+- Alt + 左ドラッグで周回、中ドラッグで平行移動、Alt + 右ドラッグでズーム。メッシュ編集では周回をAlt＋中ドラッグに切り替え、Alt＋左クリックの辺ループ選択とCtrl＋Alt＋左クリックの辺リング選択を保持します。
 - 透視投影では右ボタンを押している間に視点回転とWASD移動、Q/E下降・上昇。Shiftで加速、ホイールで速度調整。
-- 平行投影はQEADで画面内をパン、W/Sで拡大・縮小。Nメニューから「WASDでパン・Q/Eでズーム」に変更できます。
+- 自由な平行投影はQEADで画面内をパン、W/Sで拡大・縮小。Nメニューから「WASDでパン・Q/Eでズーム」に変更できます。数字キーで切り替えた正面・側面・上面などの軸方向平行投影では、移動や見回しを始めると透視投影へ切り替えます。
 - 移動座標はNメニューで「視点基準／ワールド基準」を切り替えます。視点基準では画面の右・上・奥、ワールド基準では水平移動とZ方向の上下を使います。平行投影のワールド基準は画面に近い世界座標の2軸に沿ってパンします。
 - 右ボタン保持中にCtrlを押すと微速移動します。移動は加減速を含めて時間ベースで計算し、初期設定では120Hzで更新を要求します。
 - オブジェクトモードでW/E/Rの移動・回転・拡縮ツール切替、Fで選択物へフォーカス。
@@ -60,7 +60,7 @@ Nメニューの「押し出し」ボタンは、編集W/E/Rのオン・オフ�
 
 ### インストール
 
-1. [Release v0.1.10](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.10)から `unity_view_controls-0.1.10.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
+1. [Release v0.1.11](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.11)から `unity_view_controls-0.1.11.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
 2. Blenderで「編集 → プリファレンス → エクステンションを入手」を開きます。
 3. 右上のメニューの「ディスクからインストール」でZIPを指定し、有効化します。
 4. 「アドオン」でUnity View Controlsを開くと、「操作」と「フライスルー」の設定が表示されます。
@@ -84,6 +84,7 @@ Nメニューの「FOV（長辺）」は、操作中のビューポートの長�
 | 移動座標 | 視点基準 | ワールド基準へ切替可能。切替はNメニューから行う |
 | 平行投影のキー配置 | QEADでパン・W/Sでズーム | WASDでパン・Q/Eでズームへ切替可能 |
 | 平行投影ズーム倍率 | 3 | 拡大・縮小の速さ |
+| 軸方向からは透視で移動 | オン | 正面・側面・上面などから実際の移動／見回しを始めると透視へ切替。オフなら軸方向でも平行投影を維持 |
 | FOV感度補正 | 0 | 0は補正なし。1では50mmより長い焦点距離に応じて見回し感度を下げる。平行投影には適用しない |
 | Shiftの速度倍率 | 4 | 加速倍率 |
 | Ctrlの微速倍率 | 0.25 | 精密な移動の倍率 |
@@ -105,7 +106,7 @@ DPI1600でのユーザーの調整値をもとに、新規導入時の初期感�
 - Blenderの座標系（Zが上）を維持します。透視投影のワールド基準ではQは下降、Eは上昇です。
 - UnityのQハンドツール、TのRectツール、Yの複合ツール、追従フォーカス、スナップ設定は今回の範囲外です。
 - カメラビューや回転ロック中は右ボタン飛行を開始しません。カメラビューを抜けるか、回転ロックを解除してください。
-- フライスルーは開始時の投影方式を維持します。平行投影ではWASD移動・見回し中も平行投影のままで、右ボタンを離しても透視投影へ切り替わりません。Escでは開始時の位置・向き・表示範囲を復元します。
+- 自由な平行投影はフライスルー中も維持します。軸方向の平行投影は、初期設定では実際の移動・見回しを始めると透視へ切り替わります。Nメニューの「軸方向からは透視で移動」をオフにすると、軸方向でも平行投影を維持します。短い右クリックだけなら投影を変えません。Escでは開始時の軸方向・位置・向き・表示範囲・投影を復元します。
 - マウス周回・平行移動・ズームはBlenderの標準処理を使います。速度や慣性までUnityと完全に一致させるものではありません。
 - 速度の記憶がオンなら、ホイール調整した値を移動速度として引き継ぎます。オフではその操作中だけ有効です。Escは視点を戻しますが、記憶した速度設定は維持します。
 
@@ -113,12 +114,12 @@ DPI1600でのユーザーの調整値をもとに、新規導入時の初期感�
 
 ### 開発・確認
 
-ソースは [v0.1.10タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.10)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
+ソースは [v0.1.11タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.11)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.10
+git checkout v0.1.11
 ```
 
 以下はPowerShellで、プロジェクトのルートから実行します。
@@ -132,6 +133,8 @@ git checkout v0.1.10
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_blender_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
+  --factory-startup --enable-event-simulate --python tests/run_navigation_input_tests.py
+& 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_outliner_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_outliner_edit_tests.py
@@ -141,7 +144,7 @@ git checkout v0.1.10
   --factory-startup --enable-event-simulate --python tests/run_editing_config_tests.py
 ```
 
-ビルドはBlenderの公式エクステンション検証とZIP生成を行います。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。編集モードの回帰テストは、ボーン／アーマチュアデータの実右クリックメニュー、階層開閉、ボーン形状・親子関係・選択とモードの保持、登録解除を確認し、`artifacts/outliner-edit-results.json` に保存します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
+ビルドはBlenderの公式エクステンション検証とZIP生成を行います。`tests/run_navigation_input_tests.py` は実入力の辺ループ／リング選択、編集時のAlt＋中ドラッグ、数字キー後の投影切替、短い右クリック、Escでの軸方向復元、設定オフと自由な平行投影の保持を確認し、`artifacts/navigation-input-results.json` に結果を保存します。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。編集モードの回帰テストは、ボーン／アーマチュアデータの実右クリックメニュー、階層開閉、ボーン形状・親子関係・選択とモードの保持、登録解除を確認し、`artifacts/outliner-edit-results.json` に保存します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
 
 ### 参照仕様
 
@@ -153,7 +156,7 @@ git checkout v0.1.10
 
 ### ライセンス
 
-[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.10/addon/LICENSE)。
+[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.11/addon/LICENSE)。
 
 <a id="en"></a>
 
@@ -163,7 +166,7 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 
 ### Installation
 
-1. Download `unity_view_controls-0.1.10.zip` from [Release v0.1.10](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.10). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
+1. Download `unity_view_controls-0.1.11.zip` from [Release v0.1.11](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.11). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
 2. In Blender, open **Edit → Preferences → Get Extensions**.
 3. Open the menu in the upper-right corner, choose **Install from Disk**, select the ZIP, and enable the extension.
 4. Open **Add-ons → Unity View Controls** for preferences, or press **N** in the 3D View and choose **View → Unity View Controls**.
@@ -172,7 +175,10 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 
 | Input | Action |
 | --- | --- |
-| Alt + left drag | Orbit |
+| Alt + left drag | Orbit outside Mesh Edit Mode |
+| Alt + middle drag in Mesh Edit Mode | Orbit |
+| Alt + left click in Mesh Edit Mode | Native edge-loop selection |
+| Ctrl + Alt + left click in Mesh Edit Mode | Native edge-ring selection |
 | Middle drag | Pan |
 | Alt + right drag | Zoom |
 | Hold right mouse + WASD | Move through a perspective view |
@@ -185,7 +191,7 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 | W / E / R in Object Mode | Select Move / Rotate / Scale gizmos |
 | F in Object Mode | Frame the selection |
 
-In orthographic views, the default layout uses **QEAD to pan and W/S to zoom**. The N-panel can switch this to **WASD to pan and Q/E to zoom**. Navigation preserves the original projection, including after releasing right mouse. Esc restores the starting position, rotation, and view distance.
+In free orthographic views, the default layout uses **QEAD to pan and W/S to zoom**. The N-panel can switch this to **WASD to pan and Q/E to zoom**. These free orthographic views keep their projection. By default, starting actual movement or mouse look from an axis-aligned orthographic view, such as a Front, Right, or Top view selected with a numeric key, switches to perspective. A short right click preserves the projection. Disable **軸方向からは透視で移動** in the N-panel to retain orthographic projection in axis views too. Esc restores the original axis alignment, projection, position, rotation, and view distance.
 
 Choose **View** or **World** movement coordinates in the N-panel. View coordinates follow the screen's right, up, and depth axes. World coordinates use horizontal movement and Blender's Z axis for height. Orthographic world-space panning uses the two world axes closest to the view plane.
 
@@ -213,7 +219,7 @@ Navigation supports these 22 current Blender modes:
 | Grease Pencil Edit | Supported | Native menu |
 | Grease Pencil Draw, Sculpt, Weight Paint, Vertex Paint | Supported | Native brush settings |
 
-Texture Paint support applies to the 3D View. No bindings are installed in the 2D Image Editor. Additional edit and paint mode bindings are limited to right mouse, preserving mode-specific chords such as Alt-click bone selection.
+Texture Paint support applies to the 3D View. No bindings are installed in the 2D Image Editor. Mesh Edit Mode also gets Alt+middle-drag orbit while preserving native Alt+left-click loop selection and Ctrl+Alt+left-click ring selection. Other added edit and paint mode bindings are limited to right mouse, preserving mode-specific chords such as Alt-click bone selection.
 
 Tested with Blender 4.4.3. Legacy Grease Pencil compatibility identifiers still exposed by the API are excluded. Run `tests/check_mode_coverage.py` to compare the supported set against the installed Blender's mode identifiers.
 
@@ -254,6 +260,7 @@ The N-panel shares the same preferences for speed, speed memory, look sensitivit
 | Movement coordinates | View | Switch to World in the N-panel |
 | Orthographic layout | QEAD pan, W/S zoom | Optional WASD pan, Q/E zoom |
 | Orthographic zoom multiplier | 3 | Zoom speed |
+| Switch axis views to perspective | On | Actual movement or look from Front/Right/Top and other axis-aligned orthographic views switches to perspective; disabling it preserves orthographic projection |
 | FOV sensitivity compensation | 0 | 0 disables compensation; 1 reduces sensitivity at focal lengths longer than 50 mm; perspective views only |
 | Shift boost | 4 | Movement multiplier |
 | Ctrl precision | 0.25 | Fine movement multiplier |
@@ -280,15 +287,17 @@ Disabling the add-on removes its added inputs and cancels active navigation. It 
 
 ### Development and verification
 
-The complete release source is available at [tag v0.1.10](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.10). To work from that source:
+The complete release source is available at [tag v0.1.11](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.11). To work from that source:
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.10
+git checkout v0.1.11
 ```
 
 Run the PowerShell commands in the [Japanese development section](#development-commands) from the project root. `scripts/build.ps1` uses Blender's official extension validation and ZIP builder. Adjust the Blender executable path for your installation.
+
+`tests/run_navigation_input_tests.py` covers actual loop/ring selection, Alt+middle-drag orbit, numeric axis views, perspective transitions, short context clicks, cancellation with axis restoration, the preference toggle, and free orthographic projection. Results go to `artifacts/navigation-input-results.json`.
 
 GUI checks use isolated factory-startup windows and exercise actual key dispatch, navigation/cancellation, registration/unregistration, and preservation of existing keys and scene data. Outliner checks cover recursive hierarchy actions. `tests/run_outliner_edit_tests.py` checks native bone/armature-data context menus in Edit Mode, actual expansion/collapse, bone geometry/parenting/selection preservation, and callback cleanup; its results are saved to `artifacts/outliner-edit-results.json`. Extended mode checks cover 15 added modes, actual gizmo dragging, proportional deformation, and native Undo. Editing-configuration checks cover six extrusion modes, configurable shortcuts, conflicts, N-panel context, radius updates, and cleanup.
 
@@ -304,4 +313,4 @@ This is an independent add-on. It preserves Blender's coordinate system and obje
 
 ### License
 
-[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.10/addon/LICENSE).
+[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.11/addon/LICENSE).
