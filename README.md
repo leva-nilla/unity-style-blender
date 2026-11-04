@@ -2,7 +2,7 @@
 
 [日本語](#ja) | [English](#en)
 
-[Download v0.1.9 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.9/unity_view_controls-0.1.9.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
+[Download v0.1.10 / ダウンロード](https://github.com/leva-nilla/unity-style-blender/releases/download/v0.1.10/unity_view_controls-0.1.10.zip) · [Releases](https://github.com/leva-nilla/unity-style-blender/releases)
 
 <a id="ja"></a>
 
@@ -19,7 +19,7 @@ Blenderの3Dビュー操作をUnity Editorに寄せるアドオン。Blender 4.4
 - 右ボタン保持中にCtrlを押すと微速移動します。移動は加減速を含めて時間ベースで計算し、初期設定では120Hzで更新を要求します。
 - オブジェクトモードでW/E/Rの移動・回転・拡縮ツール切替、Fで選択物へフォーカス。
 - アウトライナーでコレクションやオブジェクトの三角をAlt＋クリックすると、子孫の階層までまとめて開閉します。通常クリックやBlender標準のShift＋クリックも使えます。
-- コレクションや親オブジェクトを選び、右クリックメニューの「子をすべて展開／子をすべて折りたたみ」で、アクティブな項目の配下を一括開閉できます。複数選択でも、対象はアクティブな一つです。
+- コレクションや親オブジェクトを選び、右クリックメニューの「子をすべて展開／子をすべて折りたたみ」で、アクティブな項目の配下を一括開閉できます。ボーンやアーマチュアデータのメニューにも表示し、ボーン編集中の階層開閉にも使えます。複数選択でも、対象はアクティブな一つです。
 - 右クリックだけなら、現在のモードのコンテキストメニューを開きます。
 - 移動後に右ボタンを離すと確定。Escやウィンドウの非アクティブ化で開始時の視点へ戻します。
 - 無効化で追加したキー設定と実行中の操作を解除。既存キーマップの編集・削除、作品の編集、プリファレンスの自動保存は行いません。
@@ -60,7 +60,7 @@ Nメニューの「押し出し」ボタンは、編集W/E/Rのオン・オフ�
 
 ### インストール
 
-1. [Release v0.1.9](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.9)から `unity_view_controls-0.1.9.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
+1. [Release v0.1.10](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.10)から `unity_view_controls-0.1.10.zip` をダウンロードします。自動生成の「Source code」ZIPとは別のファイルです。
 2. Blenderで「編集 → プリファレンス → エクステンションを入手」を開きます。
 3. 右上のメニューの「ディスクからインストール」でZIPを指定し、有効化します。
 4. 「アドオン」でUnity View Controlsを開くと、「操作」と「フライスルー」の設定が表示されます。
@@ -113,12 +113,12 @@ DPI1600でのユーザーの調整値をもとに、新規導入時の初期感�
 
 ### 開発・確認
 
-ソースは [v0.1.9タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.9)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
+ソースは [v0.1.10タグ](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.10)にあります。ソースを取得する場合は、このタグをチェックアウトしてください。
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.9
+git checkout v0.1.10
 ```
 
 以下はPowerShellで、プロジェクトのルートから実行します。
@@ -134,12 +134,14 @@ git checkout v0.1.9
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_outliner_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
+  --factory-startup --enable-event-simulate --python tests/run_outliner_edit_tests.py
+& 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_extended_tests.py
 & 'C:\Program Files (x86)\Steam\steamapps\common\Blender\blender.exe' `
   --factory-startup --enable-event-simulate --python tests/run_editing_config_tests.py
 ```
 
-ビルドはBlenderの公式エクステンション検証とZIP生成を行います。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
+ビルドはBlenderの公式エクステンション検証とZIP生成を行います。テストは初期状態の別ウィンドウを使い、実際のキーディスパッチ、飛行、キャンセル、登録・解除、既存キー保持を検証します。アウトライナーテストは専用の入れ子コレクションで再帰開閉と所属・表示設定の保持を確認します。編集モードの回帰テストは、ボーン／アーマチュアデータの実右クリックメニュー、階層開閉、ボーン形状・親子関係・選択とモードの保持、登録解除を確認し、`artifacts/outliner-edit-results.json` に保存します。`artifacts/test-results.json` と `artifacts/outliner-results.json` に結果を出し、目視確認用にウィンドウを残します。追加モードのテストは15モードの入力・データ保持、軸ギズモの実ドラッグ、プロポーショナル変形とUndo、編集W/E/Rを検証します。結果は `artifacts/extended-results.json`、専用の確認シーンは `artifacts/gizmo017.blend` に保存します。代替キーと半径プレビューのテストは、6つの編集モードの実キー入力と押し出し・Undo、Nメニューのコンテキスト、競合検出、半径表示の追従と後片付けを確認し、`artifacts/editing-config-results.json` に保存します。通常の作品やユーザー設定は保存しません。
 
 ### 参照仕様
 
@@ -151,7 +153,7 @@ git checkout v0.1.9
 
 ### ライセンス
 
-[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.9/addon/LICENSE)。
+[GNU GPL v3.0以降](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.10/addon/LICENSE)。
 
 <a id="en"></a>
 
@@ -161,7 +163,7 @@ Unity-style 3D View controls for Blender. Tested on Windows with Blender 4.4.3; 
 
 ### Installation
 
-1. Download `unity_view_controls-0.1.9.zip` from [Release v0.1.9](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.9). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
+1. Download `unity_view_controls-0.1.10.zip` from [Release v0.1.10](https://github.com/leva-nilla/unity-style-blender/releases/tag/v0.1.10). Choose the extension ZIP, separately from GitHub's automatically generated source archives.
 2. In Blender, open **Edit → Preferences → Get Extensions**.
 3. Open the menu in the upper-right corner, choose **Install from Disk**, select the ZIP, and enable the extension.
 4. Open **Add-ons → Unity View Controls** for preferences, or press **N** in the 3D View and choose **View → Unity View Controls**.
@@ -192,7 +194,7 @@ Movement uses elapsed-time integration, including acceleration and deceleration.
 ### Collection and object hierarchies
 
 - Alt-click a disclosure triangle in the Outliner to recursively expand or collapse a collection or object hierarchy. Normal clicking and Blender's native Shift-click remain available.
-- The collection and object context menus also provide **子をすべて展開 / 子をすべて折りたたみ** (expand / collapse all children).
+- The collection and object context menus also provide **子をすべて展開 / 子をすべて折りたたみ** (expand / collapse all children). The actions are also available in bone and armature-data menus, including Armature Edit Mode.
 - With multiple items selected, the menu acts on the active item only. For mixed expansion states, Alt-click expands the whole subtree first; the next Alt-click collapses it.
 
 These actions only change the Outliner tree display. They preserve collection membership, parenting, visibility, and view-layer exclusion.
@@ -278,17 +280,17 @@ Disabling the add-on removes its added inputs and cancels active navigation. It 
 
 ### Development and verification
 
-The complete release source is available at [tag v0.1.9](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.9). To work from that source:
+The complete release source is available at [tag v0.1.10](https://github.com/leva-nilla/unity-style-blender/tree/v0.1.10). To work from that source:
 
 ```powershell
 git clone https://github.com/leva-nilla/unity-style-blender.git
 cd unity-style-blender
-git checkout v0.1.9
+git checkout v0.1.10
 ```
 
 Run the PowerShell commands in the [Japanese development section](#development-commands) from the project root. `scripts/build.ps1` uses Blender's official extension validation and ZIP builder. Adjust the Blender executable path for your installation.
 
-GUI checks use isolated factory-startup windows and exercise actual key dispatch, navigation/cancellation, registration/unregistration, and preservation of existing keys and scene data. Outliner checks cover recursive hierarchy actions. Extended mode checks cover 15 added modes, actual gizmo dragging, proportional deformation, and native Undo. Editing-configuration checks cover six extrusion modes, configurable shortcuts, conflicts, N-panel context, radius updates, and cleanup.
+GUI checks use isolated factory-startup windows and exercise actual key dispatch, navigation/cancellation, registration/unregistration, and preservation of existing keys and scene data. Outliner checks cover recursive hierarchy actions. `tests/run_outliner_edit_tests.py` checks native bone/armature-data context menus in Edit Mode, actual expansion/collapse, bone geometry/parenting/selection preservation, and callback cleanup; its results are saved to `artifacts/outliner-edit-results.json`. Extended mode checks cover 15 added modes, actual gizmo dragging, proportional deformation, and native Undo. Editing-configuration checks cover six extrusion modes, configurable shortcuts, conflicts, N-panel context, radius updates, and cleanup.
 
 Results are written to `artifacts/test-results.json`, `artifacts/outliner-results.json`, `artifacts/extended-results.json`, and `artifacts/editing-config-results.json`. Isolated inspection scenes include `artifacts/gizmo017.blend`. The tests leave inspection windows open and preserve normal user scenes and preferences. Build output, profiles, and test artifacts are excluded from Git.
 
@@ -302,4 +304,4 @@ This is an independent add-on. It preserves Blender's coordinate system and obje
 
 ### License
 
-[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.9/addon/LICENSE).
+[GNU GPL v3.0 or later](https://github.com/leva-nilla/unity-style-blender/blob/v0.1.10/addon/LICENSE).
