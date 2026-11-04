@@ -8,6 +8,7 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, St
 from mathutils import Quaternion, Vector
 
 from .motion import integrate_velocity, movement_axes
+from . import radius_preview
 
 
 _keymaps = []
@@ -28,6 +29,20 @@ _EXTRA_MODE_MAPS = (
     "Grease Pencil Weight Paint", "Grease Pencil Vertex Paint",
 )
 _EDIT_TOOL_MAPS = ("Mesh", "Armature", "Curve", "Curves", "Metaball", "Lattice", "Grease Pencil Edit Mode")
+# Match each mode's native E action; Surface uses the Curve keymap too.
+_EDIT_EXTRUDE_KEYS = (
+    ("Mesh", "view3d.edit_mesh_extrude_move_normal"),
+    ("Armature", "armature.extrude_move"),
+    ("Curve", "curve.extrude_move"),
+    ("Curves", "curves.extrude_move"),
+    ("Grease Pencil Edit Mode", "grease_pencil.extrude_move"),
+)
+_EXTRUDE_MODES = {"EDIT_MESH": "Mesh", "EDIT_ARMATURE": "Armature", "EDIT_CURVE": "Curve",
+                  "EDIT_SURFACE": "Curve", "EDIT_CURVES": "Curves",
+                  "EDIT_GREASE_PENCIL": "Grease Pencil Edit Mode"}
+_EXTRUDE_KEY_ITEMS = [("NONE", "割当なし", "押し出しボタンのみ使用")]
+_EXTRUDE_KEY_ITEMS += [(chr(code), chr(code), "") for code in range(ord("A"), ord("Z") + 1)]
+_EXTRUDE_KEY_ITEMS += [(f"F{i}", f"F{i}", "") for i in range(1, 13)]
 _EDIT_TOOL_MODES = {"EDIT_MESH", "EDIT_ARMATURE", "EDIT_CURVE", "EDIT_CURVES", "EDIT_SURFACE",
                     "EDIT_METABALL", "EDIT_LATTICE", "EDIT_GREASE_PENCIL"}
 _CONTEXT_MENUS = {
@@ -112,6 +127,12 @@ def _install_keymaps(context):
             km = kc.keymaps.new(name=name, space_type="VIEW_3D" if name == "3D View" else "EMPTY")
             for key, tool in (("W", "builtin.move"), ("E", "builtin.rotate"), ("R", "builtin.scale")):
                 _add_key(km, "view3d.unity_edit_tool", key, {"tool": tool})
+        binding = _extrude_binding(preferences(context))
+        if binding is not None:
+            key, modifiers = binding
+            for name, operator in _EDIT_EXTRUDE_KEYS:
+                km = kc.keymaps.new(name=name, space_type="EMPTY")
+                _add_key(km, "view3d.unity_extrude", key, **modifiers)
     if setting(context, "outliner_hierarchy", True):
         km = kc.keymaps.new(name="Outliner", space_type="OUTLINER")
         _add_key(km, "outliner.item_openclose", "LEFTMOUSE", {"all": True},
@@ -137,6 +158,59 @@ def _update_keymaps(self, context):
         for operator in tuple(_running):
             operator.stop(restore=True)
         _install_keymaps(context)
+
+
+def _extrude_binding(prefs):
+    key = getattr(prefs, "extrude_key", "E")
+    modifiers = {name: getattr(prefs, "extrude_" + name, name == "shift")
+                 for name in ("shift", "ctrl", "alt")}
+    if key == "NONE" or (key in {"W", "E", "R"} and not any(modifiers.values())):
+        return None
+    return key, modifiers
+
+
+def extrude_conflicts(context, prefs, mode=None):
+    """Report overlapping effective user bindings; never modify or save them."""
+    binding = _extrude_binding(prefs)
+    if binding is None:
+        return []
+    key, modifiers = binding
+    maps = {_EXTRUDE_MODES[mode]} if mode in _EXTRUDE_MODES else {name for name, op in _EDIT_EXTRUDE_KEYS}
+    maps.update(("3D View", "3D View Generic", "Window", "Screen"))
+    conflicts = set()
+    kc = context.window_manager.keyconfigs.user
+    if kc is None:
+        return []
+    for km in kc.keymaps:
+        if km.name not in maps:
+            continue
+        for item in km.keymap_items:
+            if (not item.active or item.idname == "view3d.unity_extrude" or item.type != key
+                    or item.value not in {"PRESS", "ANY"} or item.key_modifier != "NONE"):
+                continue
+            if item.any or all(getattr(item, name) in {-1, int(value)} for name, value in modifiers.items()):
+                if item.any or item.oskey in {-1, 0}:
+                    conflicts.add((km.name, item.name))
+    return sorted(conflicts)
+
+
+def _draw_extrude_settings(layout, context, prefs, mode=None):
+    col = layout.column()
+    col.active = prefs.edit_tools
+    col.prop(prefs, "extrude_key", text="代替キー")
+    row = col.row(align=True)
+    for name in ("shift", "ctrl", "alt"):
+        row.prop(prefs, "extrude_" + name, toggle=True)
+    if prefs.edit_tools and prefs.extrude_key != "NONE":
+        if _extrude_binding(prefs) is None:
+            col.label(text="W/E/Rには修飾キーを付けてください", icon="ERROR")
+        else:
+            for keymap, label in extrude_conflicts(context, prefs, mode):
+                col.label(text="競合: " + label, icon="ERROR")
+
+
+def _update_radius_preview(self, context):
+    radius_preview.redraw()
 
 
 def _get_look_sensitivity(self):
@@ -191,7 +265,13 @@ def _draw_edit_tools(layout, context, prefs):
     row = box.row(align=True)
     for tool, label in (("builtin.move", "移動"), ("builtin.rotate", "回転"), ("builtin.scale", "拡縮")):
         row.operator("view3d.unity_edit_tool", text=label).tool = tool
+    if context.mode in _EXTRUDE_MODES:
+        row = box.row()
+        row.operator_context = "INVOKE_REGION_WIN"
+        row.operator("view3d.unity_extrude", text="押し出し")
     box.prop(prefs, "edit_tools")
+    if context.mode in _EXTRUDE_MODES:
+        _draw_extrude_settings(box, context, prefs, context.mode)
     box.prop(context.scene.transform_orientation_slots[0], "type", text="ギズモ座標")
     if context.mode != "EDIT_ARMATURE":
         settings = context.scene.tool_settings
@@ -199,6 +279,7 @@ def _draw_edit_tools(layout, context, prefs):
         col = box.column()
         col.active = settings.use_proportional_edit
         col.prop(settings, "proportional_distance", text="影響半径")
+        col.prop(prefs, "show_proportional_radius")
         col.prop(settings, "proportional_edit_falloff", text="減衰")
         col.prop(settings, "use_proportional_connected", text="接続のみ")
         col.prop(settings, "use_proportional_projected", text="投影")
@@ -210,8 +291,16 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
     navigation: BoolProperty(name="Unity形式の視点操作", default=True, update=_update_keymaps)
     object_tools: BoolProperty(name="オブジェクトモードでW/E/R・Fを使用", default=True,
                                update=_update_keymaps)
-    edit_tools: BoolProperty(name="編集モードでW/E/Rを使用", description="Eの押し出しなど標準ショートカットをギズモ切替へ置き換えます",
+    edit_tools: BoolProperty(name="編集モードでW/E/Rを使用", description="W/E/Rでギズモを切り替えます。押し出しの代替キーを下で設定できます",
                              default=False, update=_update_keymaps)
+    extrude_key: EnumProperty(name="押し出しの代替キー", items=_EXTRUDE_KEY_ITEMS,
+                              default="E", update=_update_keymaps)
+    extrude_shift: BoolProperty(name="Shift", default=True, update=_update_keymaps)
+    extrude_ctrl: BoolProperty(name="Ctrl", default=False, update=_update_keymaps)
+    extrude_alt: BoolProperty(name="Alt", default=False, update=_update_keymaps)
+    show_proportional_radius: BoolProperty(name="影響範囲を表示", default=True,
+        description="選択点の中心に半径の目安を表示。接続・投影・複数点選択による実際の影響領域とは異なります",
+        update=_update_radius_preview)
     outliner_hierarchy: BoolProperty(name="コレクション・オブジェクトの一括開閉", default=True,
                                      update=_update_keymaps)
     fly_speed: FloatProperty(name="移動速度", default=5.0, min=0.01, max=10000.0)
@@ -248,6 +337,8 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
         col.prop(self, "navigation")
         col.prop(self, "object_tools")
         col.prop(self, "edit_tools")
+        _draw_extrude_settings(col, context, self)
+        col.prop(self, "show_proportional_radius")
         col.prop(self, "outliner_hierarchy")
         box = self.layout.box()
         box.label(text="フライスルー")
@@ -318,6 +409,26 @@ class VIEW3D_OT_unity_edit_tool(bpy.types.Operator):
         context.space_data.show_gizmo = True
         context.space_data.show_gizmo_tool = True
         return {"FINISHED"}
+
+
+class VIEW3D_OT_unity_extrude(bpy.types.Operator):
+    bl_idname = "view3d.unity_extrude"
+    bl_label = "押し出し"
+    bl_description = "このモードのBlender標準の押し出しを開始します"
+    bl_options = {"INTERNAL"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == "VIEW_3D" and context.mode in _EXTRUDE_MODES
+
+    def execute(self, context):
+        operator = dict(_EDIT_EXTRUDE_KEYS)[_EXTRUDE_MODES[context.mode]]
+        module, name = operator.split(".")
+        region = next(r for r in context.area.regions if r.type == "WINDOW")
+        with context.temp_override(region=region):
+            result = getattr(getattr(bpy.ops, module), name)("INVOKE_DEFAULT")
+        # The native operator owns the modal transform and its Undo entry.
+        return {"CANCELLED"} if "CANCELLED" in result else {"FINISHED"}
 
 
 class VIEW3D_OT_unity_fly(bpy.types.Operator):
@@ -484,7 +595,7 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
 
 
 _CLASSES = (UnityViewPreferences, VIEW3D_PT_unity_view, VIEW3D_OT_unity_tool,
-            VIEW3D_OT_unity_frame, VIEW3D_OT_unity_edit_tool, VIEW3D_OT_unity_fly)
+            VIEW3D_OT_unity_frame, VIEW3D_OT_unity_edit_tool, VIEW3D_OT_unity_extrude, VIEW3D_OT_unity_fly)
 
 
 def register():
@@ -500,6 +611,7 @@ def register():
         get=_get_view_fov, set=_set_view_fov)
     _registered = True
     _install_keymaps(bpy.context)
+    radius_preview.register(__package__)
     for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
         menu.append(_draw_hierarchy)
 
@@ -511,6 +623,7 @@ def unregister():
     for operator in tuple(_running):
         operator.stop(restore=True)
     _remove_keymaps()
+    radius_preview.unregister()
     for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
         menu.remove(_draw_hierarchy)
     del bpy.types.WindowManager.unity_view_fov
