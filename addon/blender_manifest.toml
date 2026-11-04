@@ -1,0 +1,13 @@
+schema_version = "1.0.0"
+id = "unity_view_controls"
+version = "0.1.11"
+name = "Unity View Controls"
+tagline = "Unity-style navigation and object tools in the 3D View"
+maintainer = "leva-nilla"
+type = "add-on"
+tags = ["3D View", "User Interface"]
+blender_version_min = "4.4.0"
+license = ["SPDX:GPL-3.0-or-later"]
+
+[build]
+paths_exclude_pattern = ["__pycache__/", "*.pyc"]
