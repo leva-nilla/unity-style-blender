@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "unity_view_controls"
-version = "0.1.0"
+version = "0.1.1"
 name = "Unity View Controls"
 tagline = "Unity-style navigation and object tools in the 3D View"
 maintainer = "leva-nilla"

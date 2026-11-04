@@ -37,8 +37,8 @@ def _remove_keymaps():
     _keymaps.clear()
 
 
-def _add_key(km, operator, key, properties=None, **modifiers):
-    item = km.keymap_items.new(operator, key, "PRESS", head=True, **modifiers)
+def _add_key(km, operator, key, properties=None, *, value="PRESS", **modifiers):
+    item = km.keymap_items.new(operator, key, value, head=True, **modifiers)
     for name, value in (properties or {}).items():
         setattr(item.properties, name, value)
     _keymaps.append((km, item))
@@ -68,6 +68,24 @@ def _install_keymaps(context):
                               ("R", "builtin.scale")):
                 _add_key(km, "view3d.unity_tool", key, {"tool": tool})
             _add_key(km, "view3d.unity_frame", "F")
+    if setting(context, "outliner_hierarchy", True):
+        km = kc.keymaps.new(name="Outliner", space_type="OUTLINER")
+        _add_key(km, "outliner.item_openclose", "LEFTMOUSE", {"all": True},
+                 value="CLICK", alt=True)
+
+
+def _draw_collection_hierarchy(self, context):
+    if not setting(context, "outliner_hierarchy", True):
+        return
+    self.layout.separator()
+    col = self.layout.column()
+    # select_walk is invoke-only; run against the Outliner window region rather than the menu.
+    col.operator_context = "INVOKE_REGION_WIN"
+    for direction, text, icon in (("RIGHT", "子をすべて展開", "DISCLOSURE_TRI_DOWN"),
+                                  ("LEFT", "子をすべて折りたたみ", "DISCLOSURE_TRI_RIGHT")):
+        op = col.operator("outliner.select_walk", text=text, icon=icon)
+        op.direction = direction
+        op.toggle_all = True
 
 
 def _update_keymaps(self, context):
@@ -83,6 +101,8 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
     navigation: BoolProperty(name="Unity形式の視点操作", default=True, update=_update_keymaps)
     object_tools: BoolProperty(name="オブジェクトモードでW/E/R・Fを使用", default=True,
                                update=_update_keymaps)
+    outliner_hierarchy: BoolProperty(name="コレクションの一括開閉", default=True,
+                                     update=_update_keymaps)
     fly_speed: FloatProperty(name="移動速度", default=5.0, min=0.01, max=10000.0)
     sensitivity: FloatProperty(name="見回し感度", default=0.003, min=0.0001, max=0.03,
                                precision=4)
@@ -92,6 +112,7 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
         col = self.layout.column()
         col.prop(self, "navigation")
         col.prop(self, "object_tools")
+        col.prop(self, "outliner_hierarchy")
         col.prop(self, "fly_speed")
         col.prop(self, "sensitivity")
         col.prop(self, "boost")
@@ -270,6 +291,7 @@ def register():
         bpy.utils.register_class(cls)
     _registered = True
     _install_keymaps(bpy.context)
+    bpy.types.OUTLINER_MT_collection.append(_draw_collection_hierarchy)
 
 
 def unregister():
@@ -279,6 +301,7 @@ def unregister():
     for operator in tuple(_running):
         operator.stop(restore=True)
     _remove_keymaps()
+    bpy.types.OUTLINER_MT_collection.remove(_draw_collection_hierarchy)
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)
     _registered = False

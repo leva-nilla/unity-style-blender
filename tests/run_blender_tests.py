@@ -60,7 +60,7 @@ def setup():
     bpy.context.window_manager.keyconfigs.update()
     count = len(addon._keymaps)
     addon.register()
-    check(count == 32 and len(addon._keymaps) == count, "register is idempotent (32 bindings)")
+    check(count == 33 and len(addon._keymaps) == count, "register is idempotent (33 bindings)")
     check(not any(km.name == "Mesh" and item.type in {"E", "F", "R", "W"}
                   for km, item in addon._keymaps), "mesh modeling shortcuts are preserved")
     # User-authored item must survive the add-on lifecycle without mutation.
@@ -256,12 +256,16 @@ def check_preferences():
     entry.module = addon.__package__
     prefs = entry.preferences
     prefs.navigation = False
-    check(len(addon._keymaps) == 8, "navigation can be disabled independently")
+    check(len(addon._keymaps) == 9, "navigation can be disabled independently")
     prefs.object_tools = False
-    check(not addon._keymaps, "both options disabled remove all bindings")
+    check(len(addon._keymaps) == 1 and addon._keymaps[0][0].name == "Outliner",
+          "viewport options do not disable collection hierarchy")
+    prefs.outliner_hierarchy = False
+    check(not addon._keymaps, "all options disabled remove all bindings")
     prefs.navigation = True
     prefs.object_tools = True
-    check(len(addon._keymaps) == 32, "preference toggles restore bindings without duplicates")
+    prefs.outliner_hierarchy = True
+    check(len(addon._keymaps) == 33, "preference toggles restore bindings without duplicates")
     bpy.context.preferences.addons.remove(entry)
 
 
