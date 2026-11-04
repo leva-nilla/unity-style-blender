@@ -4,13 +4,31 @@ from pathlib import Path
 import sys
 import unittest
 
-from mathutils import Vector
+from mathutils import Vector, Euler
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from addon.motion import integrate_velocity
+from addon.motion import integrate_velocity, movement_axes
 
 
 class VelocityTests(unittest.TestCase):
+    def test_view_space_follows_camera_axes(self):
+        rotation = Euler((0.7, 0.2, -0.4)).to_quaternion()
+        right, up, forward = movement_axes(rotation, "VIEW")
+        self.assertLess((up - rotation @ Vector((0, 1, 0))).length, 0.00001)
+        self.assertLess((forward - rotation @ Vector((0, 0, -1))).length, 0.00001)
+
+    def test_world_space_keeps_vertical_axis(self):
+        right, up, forward = movement_axes(Euler((0.7, 0.2, -0.4)).to_quaternion(), "WORLD")
+        self.assertEqual(up, Vector((0, 0, 1)))
+        self.assertAlmostEqual(forward.z, 0, places=6)
+        self.assertAlmostEqual(right.dot(forward), 0, places=6)
+
+    def test_orthographic_world_pan_uses_distinct_world_axes(self):
+        right, up, _ = movement_axes(Euler((0.7, 0.2, -0.4)).to_quaternion(), "WORLD", True)
+        self.assertEqual(sum(abs(v) for v in right), 1)
+        self.assertEqual(sum(abs(v) for v in up), 1)
+        self.assertEqual(right.dot(up), 0)
+
     def test_response_is_independent_of_update_frequency(self):
         def travel(rate):
             velocity = Vector((0, 0, 0))

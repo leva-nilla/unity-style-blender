@@ -1,6 +1,7 @@
 """Run in an isolated GUI: blender --factory-startup --enable-event-simulate --python ..."""
 
 import json
+import math
 from pathlib import Path
 import sys
 import traceback
@@ -61,7 +62,7 @@ def setup():
     bpy.context.window_manager.keyconfigs.update()
     count = len(addon._keymaps)
     addon.register()
-    check(count == 33 and len(addon._keymaps) == count, "register is idempotent (33 bindings)")
+    check(count == 35 and len(addon._keymaps) == count, "register is idempotent (35 bindings)")
     check(not any(km.name == "Mesh" and item.type in {"E", "F", "R", "W"}
                   for km, item in addon._keymaps), "mesh modeling shortcuts are preserved")
     # User-authored item must survive the add-on lifecycle without mutation.
@@ -97,6 +98,7 @@ def test_fly_motion():
     check(abs(fly._timer.time_step - 1 / 120) < 0.000001, "default navigation requests 120 Hz updates")
     # The following checks exercise immediate speed mode, independently of easing.
     fly._smoothing = 0
+    fly._move_space = "WORLD"
     eye = fly._eye()
     fly._look(80, 30)
     check(close_to(fly._eye(), eye), "look rotates around the eye without orbiting")
@@ -261,6 +263,27 @@ def check_ortho_motion():
           "WASD moves the view while retaining orthographic projection")
 
 
+def press_right():
+    event("D")
+
+
+def release_right():
+    event("D", "RELEASE")
+    event("RIGHTMOUSE", "RELEASE")
+
+
+def check_ortho_zoom():
+    current = snapshot()
+    check(current[3] == "ORTHO" and current[2] < initial[2] and close_to(initial[0], current[0]),
+          "orthographic W zooms in around a fixed center")
+    release_forward()
+
+
+def check_ortho_zoom_finished():
+    check(not addon._running and snapshot()[3] == "ORTHO" and snapshot()[2] < initial[2],
+          "orthographic zoom persists after RMB release")
+
+
 def look_ortho():
     window, area, region = context()
     window.event_simulate(type="MOUSEMOVE", value="NOTHING",
@@ -299,7 +322,7 @@ def disable_ortho():
     addon.unregister()
     current = snapshot()
     check(not addon._running and current[3] == "ORTHO" and close_to(initial[0], current[0])
-          and initial[1].rotation_difference(current[1]).angle < 0.0001,
+          and initial[1].rotation_difference(current[1]).angle < 0.0001 and abs(current[2] - initial[2]) < 0.0001,
           "disable during orthographic flight restores the original view")
     addon.register()
     event("MOUSEMOVE", "NOTHING")
@@ -344,7 +367,7 @@ def check_preferences():
     prefs.navigation = True
     prefs.object_tools = True
     prefs.outliner_hierarchy = True
-    check(len(addon._keymaps) == 33, "preference toggles restore bindings without duplicates")
+    check(len(addon._keymaps) == 35, "preference toggles restore bindings without duplicates")
     bpy.context.preferences.addons.remove(entry)
 
 
@@ -359,6 +382,10 @@ def configured_fly_start():
     prefs.precision_multiplier = 0.1
     prefs.wheel_factor = 1.5
     prefs.invert_y = True
+    prefs.move_space = "WORLD"
+    prefs.ortho_keymap = "WASD"
+    prefs.ortho_zoom_speed = 2
+    prefs.fov_compensation = 1
     start_fly()
 
 
@@ -371,18 +398,138 @@ def check_configured_fly():
     fly._look(0, 30)
     check((fly._view.view_rotation @ Vector((0, 0, -1))).z < forward_before,
           "invert Y reverses mouse look")
+    original = snapshot()
+    fly._space_data.lens = 50
+    fly._look(100, 0)
+    reference = original[1].rotation_difference(fly._view.view_rotation).angle
+    fly._view.view_location, fly._view.view_rotation = original[0], original[1]
+    fly._space_data.lens = 100
+    fly._look(100, 0)
+    compensated = original[1].rotation_difference(fly._view.view_rotation).angle
+    check(abs(compensated * 2 - reference) < 0.0001,
+          "FOV compensation halves look rotation when the lens doubles from 50 to 100 mm")
+    fly._view.view_location, fly._view.view_rotation = original[0], original[1]
+    fly._space_data.lens = 50
     event("WHEELUPMOUSE")
 
 
 def check_configured_wheel():
     check(abs(next(iter(addon._running))._speed - 10.5) < 0.0001,
           "configured wheel factor controls navigation speed changes")
+    check(abs(configured_entry.preferences.fly_speed - 10.5) < 0.0001,
+          "wheel speed is written back to the shared navigation setting")
     event("ESC")
 
 
 def clear_configured_preferences():
     check(not addon._running, "configured navigation still cancels cleanly")
     bpy.context.preferences.addons.remove(configured_entry)
+
+
+def restart_without_speed_memory():
+    configured_entry.preferences.remember_speed = False
+    start_fly()
+
+
+def check_remembered_speed():
+    check(abs(next(iter(addon._running))._speed - 10.5) < 0.0001,
+          "the next navigation gesture starts at the previously remembered speed")
+    event("WHEELUPMOUSE")
+
+
+def check_speed_not_saved():
+    check(abs(next(iter(addon._running))._speed - 15.75) < 0.0001
+          and abs(configured_entry.preferences.fly_speed - 10.5) < 0.0001,
+          "disabling speed memory leaves the shared setting unchanged")
+    event("ESC")
+
+
+def start_wasd_ortho():
+    ortho()
+    start_fly()
+
+
+def check_wasd_pan():
+    current = snapshot()
+    check(current[3] == "ORTHO" and not close_to(initial[0], current[0])
+          and abs(current[2] - initial[2]) < 0.0001,
+          "WASD orthographic layout uses W for pan without zoom")
+    event("W", "RELEASE")
+    event("Q")
+
+
+def check_wasd_zoom():
+    check(snapshot()[3] == "ORTHO" and snapshot()[2] < initial[2],
+          "WASD orthographic layout uses Q for zoom")
+    event("ESC")
+
+
+def finish_wasd_ortho():
+    check_ortho_cancel()
+    context()[1].spaces.active.region_3d.view_perspective = "PERSP"
+
+
+def check_fov():
+    window, area, region = context()
+    space = area.spaces.active
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        check(abs(bpy.context.window_manager.unity_view_fov - 2 * math.atan(36 / space.lens)) < 0.00001,
+              "FOV field follows the native viewport lens")
+        bpy.context.window_manager.unity_view_fov = math.radians(90)
+
+
+def check_fov_projection():
+    space = context()[1].spaces.active
+    matrix = space.region_3d.window_matrix
+    check(abs(space.lens - 36) < 0.0001 and abs(min(abs(matrix[0][0]), abs(matrix[1][1])) - 1) < 0.001,
+          "90 degree FOV matches the rendered projection matrix")
+    space.lens = 50
+
+
+def paint_mode(mode):
+    window, area, region = context()
+    with bpy.context.temp_override(window=window, area=area, region=region):
+        if mode == "WEIGHT_PAINT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+            obj = bpy.context.active_object
+            group = obj.vertex_groups.new(name="Navigation regression")
+            group.add(list(range(len(obj.data.vertices))), 0.375, "REPLACE")
+            group.add([0], 0.875, "REPLACE")
+        bpy.ops.object.mode_set(mode=mode)
+
+
+def paint_snapshot():
+    obj = bpy.context.active_object
+    return ([v.co.copy() for v in obj.data.vertices],
+            [[(g.group, g.weight) for g in v.groups] for v in obj.data.vertices])
+
+
+def start_paint_navigation():
+    global original_paint_data
+    original_paint_data = paint_snapshot()
+    start_fly()
+
+
+def check_paint_navigation(mode):
+    check(bpy.context.mode == mode and len(addon._running) == 1 and not close_to(initial[0], snapshot()[0]),
+          mode + " supports RMB and WASD without changing mode")
+    event("ESC")
+
+
+def check_paint_cancel(mode):
+    check(bpy.context.mode == mode and not addon._running and close_to(initial[0], snapshot()[0])
+          and paint_snapshot() == original_paint_data, mode + " navigation leaves mesh and weights intact")
+    # A short click must follow the native panel path without exceptions.
+    event("RIGHTMOUSE")
+
+
+def release_click():
+    event("RIGHTMOUSE", "RELEASE")
+
+
+def check_paint_click(mode):
+    check(not addon._running and bpy.context.mode == mode, mode + " short click restores the native context panel")
+    event("ESC")
 
 
 def finish():
@@ -407,12 +554,22 @@ tasks = [lambda: event("ESC"), setup, lambda: event("W"), lambda: tool_is("built
          edit_mesh, start_fly, check_edit_fly, object_mode,
          lambda: begin_drag("MIDDLEMOUSE"), lambda: drag("MIDDLEMOUSE"), check_pan,
          lambda: begin_drag("RIGHTMOUSE", alt=True), lambda: drag("RIGHTMOUSE", alt=True), check_zoom,
-         focus, check_focus, ortho, start_fly, press_forward, check_ortho_motion,
-         look_ortho, check_ortho_look, check_ortho_scale, release_forward, check_ortho_finish,
+         focus, check_focus, ortho, start_fly, press_right, check_ortho_motion,
+         look_ortho, check_ortho_look, check_ortho_scale, release_right, check_ortho_finish,
+         start_fly, press_forward, check_ortho_zoom, check_ortho_zoom_finished,
          start_fly, press_forward, look_ortho, lambda: event("ESC"), check_ortho_cancel,
          start_fly, press_forward, disable_ortho,
          check_camera_guard, check_preferences, configured_fly_start, check_configured_fly,
-         check_configured_wheel, clear_configured_preferences, finish]
+         check_configured_wheel, restart_without_speed_memory, check_remembered_speed, check_speed_not_saved,
+         start_wasd_ortho, press_forward, check_wasd_pan, check_wasd_zoom, finish_wasd_ortho,
+         clear_configured_preferences, finish]
+tasks[-1:-1] = [check_fov, check_fov_projection,
+               lambda: paint_mode("SCULPT"), start_paint_navigation, press_forward,
+               lambda: check_paint_navigation("SCULPT"), lambda: check_paint_cancel("SCULPT"),
+               release_click, lambda: check_paint_click("SCULPT"),
+               lambda: paint_mode("WEIGHT_PAINT"), start_paint_navigation, press_forward,
+               lambda: check_paint_navigation("PAINT_WEIGHT"), lambda: check_paint_cancel("PAINT_WEIGHT"),
+               release_click, lambda: check_paint_click("PAINT_WEIGHT"), object_mode]
 
 
 def tick():

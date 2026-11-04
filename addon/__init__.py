@@ -4,16 +4,16 @@ import math
 import time
 
 import bpy
-from bpy.props import BoolProperty, FloatProperty, IntProperty, StringProperty
+from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, StringProperty
 from mathutils import Quaternion, Vector
 
-from .motion import integrate_velocity
+from .motion import integrate_velocity, movement_axes
 
 
 _keymaps = []
 _running = set()
 _registered = False
-_MODES = {"OBJECT", "EDIT_MESH", "POSE"}
+_MODES = {"OBJECT", "EDIT_MESH", "POSE", "SCULPT", "PAINT_WEIGHT"}
 _MODE_MAPS = ("Object Mode", "Mesh", "Pose")
 
 
@@ -61,6 +61,10 @@ def _install_keymaps(context):
             _add_key(km, "view3d.move", "LEFTMOUSE", alt=True, ctrl=True)
             _add_key(km, "view3d.zoom", "RIGHTMOUSE", alt=True)
             _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
+        for name in ("Sculpt", "Weight Paint"):
+            # Preserve paint-specific chords such as Alt-LMB bone selection.
+            km = kc.keymaps.new(name=name, space_type="EMPTY")
+            _add_key(km, "view3d.unity_fly", "RIGHTMOUSE")
     if setting(context, "object_tools", True):
         # W lives in 3D View; R lives in Object Mode. Layer over both maps.
         # Operators poll for Object Mode so edit-mode modeling is preserved.
@@ -105,6 +109,43 @@ def _set_look_sensitivity(self, value):
     self.sensitivity = value * 0.0005
 
 
+def _get_view_fov(self):
+    # Blender 4.4 uses a 36 mm sensor and 2x viewport zoom on the fitted axis.
+    space = bpy.context.space_data
+    lens = space.lens if space is not None and space.type == "VIEW_3D" else 50.0
+    return 2 * math.atan(36.0 / lens)
+
+
+def _set_view_fov(self, value):
+    space = bpy.context.space_data
+    if space is not None and space.type == "VIEW_3D":
+        space.lens = max(1.0, min(250.0, 36.0 / math.tan(value / 2)))
+
+
+def _draw_navigation_settings(layout, prefs, space=None):
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+    col = layout.column()
+    for name in ("fly_speed", "remember_speed", "look_sensitivity", "smoothing"):
+        col.prop(prefs, name)
+    col.prop(prefs, "move_space", expand=True)
+    col.separator()
+    col.prop(prefs, "ortho_keymap")
+    col.prop(prefs, "ortho_zoom_speed")
+    col.separator()
+    if space is not None:
+        row = col.row()
+        row.enabled = space.region_3d is not None and space.region_3d.view_perspective == "PERSP"
+        row.prop(bpy.context.window_manager, "unity_view_fov")
+    col.prop(prefs, "fov_compensation")
+    box = layout.box()
+    box.prop(prefs, "show_advanced", text="詳細設定", emboss=False,
+             icon="TRIA_DOWN" if prefs.show_advanced else "TRIA_RIGHT")
+    if prefs.show_advanced:
+        for name in ("boost", "precision_multiplier", "wheel_factor", "update_rate", "invert_y"):
+            box.prop(prefs, name)
+
+
 class UnityViewPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -114,6 +155,16 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
     outliner_hierarchy: BoolProperty(name="コレクション・オブジェクトの一括開閉", default=True,
                                      update=_update_keymaps)
     fly_speed: FloatProperty(name="移動速度", default=5.0, min=0.01, max=10000.0)
+    remember_speed: BoolProperty(name="ホイール調整した速度を記憶", default=True)
+    move_space: EnumProperty(name="移動座標", items=(("VIEW", "視点基準", "画面の向きに沿って移動"),
+                                                  ("WORLD", "ワールド基準", "世界座標に沿って移動")), default="VIEW")
+    ortho_keymap: EnumProperty(name="平行投影のキー配置", items=(
+        ("QEAD", "QEADでパン・W/Sでズーム", "E/Qで上下、A/Dで左右、W/Sで拡大縮小"),
+        ("WASD", "WASDでパン・Q/Eでズーム", "W/Sで上下、A/Dで左右、Q/Eで拡大縮小")), default="QEAD")
+    ortho_zoom_speed: FloatProperty(name="平行投影ズーム倍率", default=3.0, min=0.01, max=20.0)
+    fov_compensation: FloatProperty(name="FOV感度補正", description="0は補正なし、1は50mmより長い焦点距離で見回し感度を下げます",
+                                    default=0.0, min=0.0, max=1.0, step=1)
+    show_advanced: BoolProperty(name="詳細設定", default=False)
     # Keep the stored radians/pixel value compatible with earlier releases.
     # The UI uses a multiplier so Blender's minimum drag step (0.01) is useful.
     sensitivity: FloatProperty(default=0.00175, min=0.000001, max=0.05, options={"HIDDEN"})
@@ -137,12 +188,10 @@ class UnityViewPreferences(bpy.types.AddonPreferences):
         col.prop(self, "navigation")
         col.prop(self, "object_tools")
         col.prop(self, "outliner_hierarchy")
-        col = self.layout.box().column()
-        col.label(text="フライスルー")
-        col.active = self.navigation
-        for name in ("fly_speed", "look_sensitivity", "boost", "precision_multiplier",
-                     "wheel_factor", "update_rate", "smoothing", "invert_y"):
-            col.prop(self, name)
+        box = self.layout.box()
+        box.label(text="フライスルー")
+        box.active = self.navigation
+        _draw_navigation_settings(box, self)
 
 
 class VIEW3D_PT_unity_view(bpy.types.Panel):
@@ -150,16 +199,14 @@ class VIEW3D_PT_unity_view(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "View"
-    bl_parent_id = "VIEW3D_PT_view3d_properties"
+    bl_order = -10
 
     @classmethod
     def poll(cls, context):
         return preferences(context) is not None
 
     def draw(self, context):
-        self.layout.use_property_split = True
-        self.layout.use_property_decorate = False
-        self.layout.prop(preferences(context), "look_sensitivity")
+        _draw_navigation_settings(self.layout, preferences(context), context.space_data)
 
 
 class VIEW3D_OT_unity_tool(bpy.types.Operator):
@@ -206,6 +253,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
 
     def invoke(self, context, event):
         self._view = context.region_data
+        self._space_data = context.space_data
+        self._prefs = preferences(context)
         self._area = context.area
         self._window = context.window
         self._wm = context.window_manager
@@ -224,7 +273,13 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self._wheel_factor = setting(context, "wheel_factor", 1.2)
         self._smoothing = setting(context, "smoothing", 0.06)
         self._invert_y = setting(context, "invert_y", False)
+        self._move_space = setting(context, "move_space", "VIEW")
+        self._ortho_keymap = setting(context, "ortho_keymap", "QEAD")
+        self._ortho_zoom_speed = setting(context, "ortho_zoom_speed", 3.0)
+        self._remember_speed = setting(context, "remember_speed", True)
+        self._fov_compensation = setting(context, "fov_compensation", 0.0)
         self._velocity = Vector((0, 0, 0))
+        self._zoom_velocity = Vector((0, 0, 0))
         self._used = False
         self._stopped = False
         self._mode = context.mode
@@ -241,6 +296,10 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
     def _look(self, dx, dy):
         if self._invert_y:
             dy = -dy
+        if self._view.view_perspective == "PERSP":
+            factor = 1 + self._fov_compensation * (min(1.0, 50.0 / self._space_data.lens) - 1)
+            dx *= factor
+            dy *= factor
         eye = self._eye()
         rotation = self._view.view_rotation
         yaw = Quaternion((0, 0, 1), -dx * self._sensitivity)
@@ -253,16 +312,24 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
                                    @ Vector((0, 0, self._view.view_distance)))
 
     def _step(self, seconds):
-        local = Vector((int("D" in self._keys) - int("A" in self._keys), 0,
-                        int("S" in self._keys) - int("W" in self._keys)))
-        motion = self._view.view_rotation @ local
-        motion.z += int("E" in self._keys) - int("Q" in self._keys)
+        ortho = self._view.view_perspective == "ORTHO"
+        right, up, forward = movement_axes(self._view.view_rotation, self._move_space, ortho)
+        vertical_up, vertical_down = ("E", "Q") if not ortho or self._ortho_keymap == "QEAD" else ("W", "S")
+        motion = right * (int("D" in self._keys) - int("A" in self._keys))
+        motion += up * (int(vertical_up in self._keys) - int(vertical_down in self._keys))
+        if not ortho:
+            motion += forward * (int("W" in self._keys) - int("S" in self._keys))
         if motion.length_squared:
-            # The same speed on diagonals; Q/E use Blender world-up (Z).
+            # Keep diagonal movement at the same configured speed.
             motion.normalize()
         speed = self._speed * (self._boost if self._shift else 1) * (self._precision if self._ctrl else 1)
         self._velocity, displacement = integrate_velocity(self._velocity, motion * speed, seconds, self._smoothing)
         self._view.view_location += displacement
+        if ortho:
+            zoom_in, zoom_out = ("W", "S") if self._ortho_keymap == "QEAD" else ("Q", "E")
+            zoom = (int(zoom_out in self._keys) - int(zoom_in in self._keys)) * speed * self._ortho_zoom_speed * 0.1
+            self._zoom_velocity, delta = integrate_velocity(self._zoom_velocity, Vector((zoom, 0, 0)), seconds, self._smoothing)
+            self._view.view_distance = max(0.001, min(1e6, self._view.view_distance * math.exp(max(-50, min(50, delta.x)))))
 
     def _advance(self):
         now = time.perf_counter()
@@ -304,10 +371,14 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         if event.type == "RIGHTMOUSE" and event.value == "RELEASE":
             self.stop()
             if not self._used:
-                menu = {"OBJECT": "VIEW3D_MT_object_context_menu",
-                        "EDIT_MESH": "VIEW3D_MT_edit_mesh_context_menu",
-                        "POSE": "VIEW3D_MT_pose_context_menu"}[self._mode]
-                bpy.ops.wm.call_menu(name=menu)
+                if self._mode in {"SCULPT", "PAINT_WEIGHT"}:
+                    panel = "VIEW3D_PT_sculpt_context_menu" if self._mode == "SCULPT" else "VIEW3D_PT_paint_weight_context_menu"
+                    bpy.ops.wm.call_panel(name=panel)
+                else:
+                    menu = {"OBJECT": "VIEW3D_MT_object_context_menu",
+                            "EDIT_MESH": "VIEW3D_MT_edit_mesh_context_menu",
+                            "POSE": "VIEW3D_MT_pose_context_menu"}[self._mode]
+                    bpy.ops.wm.call_menu(name=menu)
             return {"FINISHED"}
         if event.type in {"W", "A", "S", "D", "Q", "E"}:
             if event.value == "PRESS":
@@ -326,6 +397,8 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         elif event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
             factor = self._wheel_factor if event.type == "WHEELUPMOUSE" else 1 / self._wheel_factor
             self._speed = max(0.01, min(10000.0, self._speed * factor))
+            if self._remember_speed and self._prefs is not None:
+                self._prefs.fly_speed = self._speed
             self._used = True
         self._area.tag_redraw()
         return {"RUNNING_MODAL"}
@@ -344,6 +417,11 @@ def register():
         return
     for cls in _CLASSES:
         bpy.utils.register_class(cls)
+    bpy.types.WindowManager.unity_view_fov = FloatProperty(
+        name="FOV（長辺）", description="ビューポート長辺方向の画角。実カメラには適用しません",
+        subtype="ANGLE", default=2 * math.atan(36 / 50),
+        min=2 * math.atan(36 / 250), max=2 * math.atan(36), soft_max=math.radians(120),
+        get=_get_view_fov, set=_set_view_fov)
     _registered = True
     _install_keymaps(bpy.context)
     for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
@@ -359,6 +437,7 @@ def unregister():
     _remove_keymaps()
     for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
         menu.remove(_draw_hierarchy)
+    del bpy.types.WindowManager.unity_view_fov
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)
     _registered = False
