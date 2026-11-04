@@ -612,7 +612,9 @@ def register():
     _registered = True
     _install_keymaps(bpy.context)
     radius_preview.register(__package__)
-    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
+    # Bone/data operations draw the shared menu, including while editing an armature.
+    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object,
+                 bpy.types.OUTLINER_MT_context_menu):
         menu.append(_draw_hierarchy)
 
 
@@ -624,7 +626,8 @@ def unregister():
         operator.stop(restore=True)
     _remove_keymaps()
     radius_preview.unregister()
-    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object):
+    for menu in (bpy.types.OUTLINER_MT_collection, bpy.types.OUTLINER_MT_object,
+                 bpy.types.OUTLINER_MT_context_menu):
         menu.remove(_draw_hierarchy)
     del bpy.types.WindowManager.unity_view_fov
     for cls in reversed(_CLASSES):
