@@ -255,14 +255,54 @@ def ortho():
     context()[1].spaces.active.region_3d.view_perspective = "ORTHO"
 
 
-def check_perspective():
-    check(snapshot()[3] == "PERSP", "flight from orthographic view switches to perspective")
-    event("ESC")
+def check_ortho_motion():
+    current = snapshot()
+    check(current[3] == "ORTHO" and not close_to(initial[0], current[0]),
+          "WASD moves the view while retaining orthographic projection")
+
+
+def look_ortho():
+    window, area, region = context()
+    window.event_simulate(type="MOUSEMOVE", value="NOTHING",
+                          x=region.x + region.width // 2 + 80,
+                          y=region.y + region.height // 2 + 30)
+
+
+def check_ortho_look():
+    current = snapshot()
+    check(current[3] == "ORTHO" and initial[1].rotation_difference(current[1]).angle > 0.01,
+          "mouse look retains orthographic projection")
+    event("WHEELUPMOUSE")
+
+
+def check_ortho_scale():
+    current = snapshot()
+    check(current[3] == "ORTHO" and abs(current[2] - initial[2]) < 0.0001,
+          "wheel speed adjustment keeps orthographic projection and scale")
+
+
+def check_ortho_finish():
+    current = snapshot()
+    check(not addon._running and current[3] == "ORTHO" and not close_to(initial[0], current[0]),
+          "RMB release keeps the moved view in orthographic projection")
 
 
 def check_ortho_cancel():
-    check(snapshot()[3] == "ORTHO" and close_to(initial[0], snapshot()[0]),
-          "Esc restores orthographic projection and position")
+    current = snapshot()
+    check(not addon._running and current[3] == "ORTHO" and close_to(initial[0], current[0])
+          and initial[1].rotation_difference(current[1]).angle < 0.0001
+          and abs(initial[2] - current[2]) < 0.0001,
+          "Esc restores the complete starting orthographic view")
+
+
+def disable_ortho():
+    addon.unregister()
+    current = snapshot()
+    check(not addon._running and current[3] == "ORTHO" and close_to(initial[0], current[0])
+          and initial[1].rotation_difference(current[1]).angle < 0.0001,
+          "disable during orthographic flight restores the original view")
+    addon.register()
+    event("MOUSEMOVE", "NOTHING")
     context()[1].spaces.active.region_3d.view_perspective = "PERSP"
 
 
@@ -367,7 +407,10 @@ tasks = [lambda: event("ESC"), setup, lambda: event("W"), lambda: tool_is("built
          edit_mesh, start_fly, check_edit_fly, object_mode,
          lambda: begin_drag("MIDDLEMOUSE"), lambda: drag("MIDDLEMOUSE"), check_pan,
          lambda: begin_drag("RIGHTMOUSE", alt=True), lambda: drag("RIGHTMOUSE", alt=True), check_zoom,
-         focus, check_focus, ortho, start_fly, press_forward, check_perspective, check_ortho_cancel,
+         focus, check_focus, ortho, start_fly, press_forward, check_ortho_motion,
+         look_ortho, check_ortho_look, check_ortho_scale, release_forward, check_ortho_finish,
+         start_fly, press_forward, look_ortho, lambda: event("ESC"), check_ortho_cancel,
+         start_fly, press_forward, disable_ortho,
          check_camera_guard, check_preferences, configured_fly_start, check_configured_fly,
          check_configured_wheel, clear_configured_preferences, finish]
 

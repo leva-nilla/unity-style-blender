@@ -269,10 +269,6 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
         self._step(max(0.0, min(0.1, now - self._last)))
         self._last = now
 
-    def _perspective(self):
-        if self._view.view_perspective == "ORTHO":
-            self._view.view_perspective = "PERSP"
-
     def stop(self, restore=False):
         if self._stopped:
             return
@@ -317,7 +313,6 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             if event.value == "PRESS":
                 self._keys.add(event.type)
                 self._used = True
-                self._perspective()
             elif event.value == "RELEASE":
                 self._keys.discard(event.type)
         elif event.type == "MOUSEMOVE":
@@ -327,7 +322,6 @@ class VIEW3D_OT_unity_fly(bpy.types.Operator):
             if not self._used:
                 self._used = (x - self._origin[0]) ** 2 + (y - self._origin[1]) ** 2 > 9
             if self._used:
-                self._perspective()
                 self._look(dx, dy)
         elif event.type in {"WHEELUPMOUSE", "WHEELDOWNMOUSE"}:
             factor = self._wheel_factor if event.type == "WHEELUPMOUSE" else 1 / self._wheel_factor
