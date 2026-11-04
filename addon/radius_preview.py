@@ -17,6 +17,7 @@ _handler = None
 _owner = object()
 _package = None
 _shader = None
+_BEZIER_TYPE = bpy.ops.curves.curve_type_set.get_rna_type().properties["type"].enum_items["BEZIER"].value
 
 
 def redraw():
@@ -26,11 +27,31 @@ def redraw():
                 area.tag_redraw()
 
 
-def _attribute_points(data):
+def _attribute_points(data, *, include_handles=False):
     position = data.attributes.get("position")
     if position is None:
         return
     selection = data.attributes.get(".selection")
+    if include_handles:
+        offsets = data.curve_offset_data
+        curve_types = data.attributes.get("curve_type")
+        handles = [(data.attributes.get("handle_" + side),
+                    data.attributes.get(".selection_handle_" + side)) for side in ("left", "right")]
+
+        def selected(attribute, point, curve):
+            if attribute is None:
+                return True  # Blender's missing selection attributes mean "all selected".
+            return attribute.data[point if attribute.domain == "POINT" else curve].value
+
+        for curve in range(len(offsets) - 1):
+            for point in range(offsets[curve].value, offsets[curve + 1].value):
+                if selected(selection, point, curve):
+                    yield position.data[point].vector
+                elif curve_types is not None and curve_types.data[curve].value == _BEZIER_TYPE:
+                    for coordinates, handle_selection in handles:
+                        if coordinates is not None and selected(handle_selection, point, curve):
+                            yield coordinates.data[point].vector
+        return
     if selection is None or selection.domain == "POINT":
         for i, point in enumerate(position.data):
             if selection is None or selection.data[i].value:
@@ -47,6 +68,12 @@ def _local_points(obj):
     data = obj.data
     if obj.type == "MESH":
         bm = bmesh.from_edit_mesh(data)
+        if data.total_vert_sel == 0:
+            return
+        active = bm.select_history.active
+        if data.total_vert_sel == 1 and isinstance(active, bmesh.types.BMVert) and active.select and not active.hide:
+            yield active.co
+            return
         for vertex in bm.verts:
             if vertex.select and not vertex.hide:
                 yield vertex.co
@@ -73,29 +100,121 @@ def _local_points(obj):
             if element.select and not element.hide:
                 yield element.co
     elif obj.type == "CURVES":
-        yield from _attribute_points(data)
-    elif obj.type == "GREASEPENCIL":
+        yield from _attribute_points(data, include_handles=True)
+
+
+def _layer_to_world(obj, layer):
+    """Match Blender 4.4's Layer::to_world_space(), including bone parenting."""
+    parent = layer.parent
+    if parent is None:
+        return obj.matrix_world @ layer.matrix_local
+    matrix = parent.matrix_world
+    if parent.type == "ARMATURE" and layer.parent_bone:
+        bone = parent.pose.bones.get(layer.parent_bone)
+        if bone is not None:
+            matrix = matrix @ bone.matrix
+    return matrix @ layer.matrix_parent_inverse @ layer.matrix_local
+
+
+def _point_groups(obj):
+    if obj.type == "GREASEPENCIL":
+        data = obj.data
         for layer in data.layers:
             if layer.hide or layer.lock:
                 continue
             frame = layer.current_frame()
             if frame:
-                for point in _attribute_points(frame.drawing):
-                    yield layer.matrix_local @ point
+                yield _layer_to_world(obj, layer), _attribute_points(frame.drawing)
+    else:
+        yield obj.matrix_world, _local_points(obj)
+
+
+def _calculate_center(objects):
+    total = [0.0, 0.0, 0.0]
+    count = 0
+    for obj in objects:
+        for matrix, points in _point_groups(obj):
+            # Python floats avoid accumulating hundreds of thousands of float32 roundoff errors.
+            x = y = z = 0.0
+            local_count = 0
+            for point in points:
+                x += point.x
+                y += point.y
+                z += point.z
+                local_count += 1
+            if local_count:
+                # An affine transform needs applying only once per group, not per vertex.
+                center = matrix @ Vector((x / local_count, y / local_count, z / local_count))
+                for axis in range(3):
+                    total[axis] += center[axis] * local_count
+                count += local_count
+    return Vector([value / count for value in total]) if count else None
+
+
+def _matrix_key(matrix):
+    return tuple(value for row in matrix for value in row)
+
+
+def _object_key(obj):
+    key = (obj.as_pointer(), obj.data.as_pointer(), obj.mode, _matrix_key(obj.matrix_world))
+    if obj.type == "MESH":
+        # Native BMesh counters are O(1); never scan vertices to validate the cache.
+        key += (obj.data.total_vert_sel, obj.data.total_edge_sel, obj.data.total_face_sel)
+    elif obj.type == "GREASEPENCIL":
+        key += (tuple((layer.as_pointer(), layer.hide, layer.lock,
+                       layer.current_frame().as_pointer() if layer.current_frame() else None,
+                       _matrix_key(_layer_to_world(obj, layer))) for layer in obj.data.layers),)
+    return key
+
+
+class _SelectionCache:
+    def __init__(self):
+        self.clear()
+
+    def clear(self):
+        self.key = None
+        self.value = None
+        self.ids = set()
+
+    def center(self, context):
+        # Linked edit objects each contribute with their own world transform.
+        objects = [obj for obj in context.objects_in_mode
+                   if obj.visible_get(view_layer=context.view_layer, viewport=context.space_data)]
+        scene = getattr(context, "scene", None)
+        key = (scene.as_pointer() if scene else None, tuple(_object_key(obj) for obj in objects))
+        if key != self.key:
+            self.value = _calculate_center(objects)
+            self.key = key
+            self.ids = {item.as_pointer() for obj in objects for item in (obj, obj.data)}
+            for obj in objects:
+                if obj.type == "GREASEPENCIL":
+                    for layer in obj.data.layers:
+                        if layer.parent:
+                            self.ids.add(layer.parent.as_pointer())
+                            if layer.parent.data:
+                                self.ids.add(layer.parent.data.as_pointer())
+        return self.value.copy() if self.value is not None else None
+
+
+_center_cache = _SelectionCache()
 
 
 def selection_center(context):
-    """Median of visible selected control points, without touching selection or pivot."""
-    total = Vector((0, 0, 0))
-    count = 0
-    # Include linked edit objects separately: each has its own world transform.
-    for obj in context.objects_in_mode:
-        if not obj.visible_get(view_layer=context.view_layer, viewport=context.space_data):
-            continue
-        for point in _local_points(obj):
-            total += obj.matrix_world @ point
-            count += 1
-    return total / count if count else None
+    """Cached median of visible selected points; preserve geometry, selection, and pivot."""
+    return _center_cache.center(context)
+
+
+@persistent
+def _invalidate_center(*_args):
+    _center_cache.clear()
+
+
+@persistent
+def _depsgraph_update(_scene, depsgraph):
+    # Selection-only updates have both is_updated_geometry/transform false.
+    # Inspect the IDs themselves so replacing a selection with the same count works.
+    if _center_cache.ids and any(update.id.original.as_pointer() in _center_cache.ids for update in depsgraph.updates):
+        _center_cache.clear()
 
 
 def preview_circle(context):
@@ -148,6 +267,7 @@ def _draw():
 def _load_post(_unused):
     # Blender clears RNA subscriptions when opening another .blend.
     bpy.msgbus.clear_by_owner(_owner)
+    _center_cache.clear()
     for name in ("proportional_distance", "use_proportional_edit"):
         bpy.msgbus.subscribe_rna(key=(bpy.types.ToolSettings, name), owner=_owner,
                                 args=(), notify=redraw, options={"PERSISTENT"})
@@ -161,6 +281,9 @@ def register(package):
     _package = package
     _handler = bpy.types.SpaceView3D.draw_handler_add(_draw, (), "WINDOW", "POST_PIXEL")
     bpy.app.handlers.load_post.append(_load_post)
+    bpy.app.handlers.depsgraph_update_post.append(_depsgraph_update)
+    bpy.app.handlers.undo_post.append(_invalidate_center)
+    bpy.app.handlers.redo_post.append(_invalidate_center)
     _load_post(None)
 
 
@@ -169,9 +292,15 @@ def unregister():
     bpy.msgbus.clear_by_owner(_owner)
     if _load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_load_post)
+    for handlers, callback in ((bpy.app.handlers.depsgraph_update_post, _depsgraph_update),
+                               (bpy.app.handlers.undo_post, _invalidate_center),
+                               (bpy.app.handlers.redo_post, _invalidate_center)):
+        if callback in handlers:
+            handlers.remove(callback)
     if _handler is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_handler, "WINDOW")
         _handler = None
     _shader = None
     _package = None
+    _center_cache.clear()
     redraw()
